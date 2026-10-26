@@ -35,7 +35,7 @@ namespace HelloWorld
             {
                 var ray=count==1?centre:DuelGunplay.PelletDirection(centre,action.FiredSpread,i,action.FiredSeed);
                 var hit=DuelGunplay.TraceFrom(seat,action.FiredAliveMask,action.FiredOrigin,ray,new DuelTabletopState{BottlesBrokenMask=action.FiredBottleMask,GlassesBrokenMask=action.FiredGlassMask});
-                var end=Vec(action.FiredOrigin+ray*Mathf.Min(hit.Distance,DuelGunplay.ProjectileRange));
+                var end=Vec(action.FiredOrigin+ray*Mathf.Min(hit.Distance,DuelGunplay.ShotRange(action.FiredWeapon,action.FiredAds)));
                 var f=flights[seat,i]??(flights[seat,i]=Create(seat,i));
                 f.From=muzzle;f.To=end;f.Distance=Vector3.Distance(muzzle,end);f.Born=Time.unscaledTime;
                 f.Line.startColor=f.Line.endColor=action.FiredWeapon==DuelWeapon.Taser?new Color(.25f,.8f,1,1):Color.white;f.Line.startWidth=action.FiredWeapon==DuelWeapon.Taser?.015f:.007f;f.Line.enabled=true;Render(f,0);

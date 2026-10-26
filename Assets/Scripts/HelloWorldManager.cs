@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -10,7 +11,7 @@ using UnityEngine;
 
 namespace HelloWorld
 {
-    public class HelloWorldManager : MonoBehaviour
+    public partial class HelloWorldManager : MonoBehaviour
     {
         public static HelloWorldManager Instance { get; private set; }
         public bool Busy { get; private set; }
@@ -21,6 +22,7 @@ namespace HelloWorld
         public RouletteTable Table { get; private set; }
         private NetworkManager network;
         private readonly Dictionary<ulong, HelloWorldPlayer> players = new Dictionary<ulong, HelloWorldPlayer>();
+        private readonly DuelChatLog chatLog=new DuelChatLog();
         private readonly HashSet<ulong> reservations = new HashSet<ulong>();
         private readonly Dictionary<ulong, string> requestedNames = new Dictionary<ulong, string>();
         private readonly FixedString64Bytes[] names = new FixedString64Bytes[RouletteRules.MaxPlayers];
@@ -48,12 +50,16 @@ namespace HelloWorld
         {
             network = NetworkManager.Singleton;
             gameObject.AddComponent<LobbyJoinAudio>();
+            gameObject.AddComponent<DuelBackgroundMusic>();
+            gameObject.AddComponent<DuelGameAudio>();
             gameObject.AddComponent<DuelFirstPerson>();
             Table = gameObject.AddComponent<RouletteTable>();
             gameObject.AddComponent<RouletteView>().Initialize(this);
+            gameObject.AddComponent<DuelChat>();
+            gameObject.AddComponent<DuelPointer>();
             if (network == null) { Status = "씬에 NetworkManager가 없습니다."; return; }
             network.NetworkConfig.ConnectionApproval = true;
-            network.NetworkConfig.ProtocolVersion = 38;
+            network.NetworkConfig.ProtocolVersion = DuelLanRooms.Protocol;
             network.ConnectionApprovalCallback = Approve;
             network.OnClientDisconnectCallback += Disconnected;
             network.OnClientConnectedCallback += Connected;
@@ -82,16 +88,28 @@ namespace HelloWorld
             }
             DeveloperMode=false;
             SessionPort = mode == DuelMode.AI && !join ? (ushort)0 : selectedPort;
-            players.Clear(); reservations.Clear();
+            players.Clear(); reservations.Clear();chatLog.Clear();GetComponent<DuelChat>()?.ClearRoom();
             requestedNames.Clear(); Array.Clear(names, 0, names.Length); joinOrder = 0;
             publishedRound = publishedShots = 0;
             Array.Clear(damageReports, 0, damageReports.Length);
             Array.Clear(publishedLives,0,publishedLives.Length);
             roundResults = default;
-            network.NetworkConfig.ConnectionData = Encoding.UTF8.GetBytes(NicknamePolicy.Normalize(Nickname));
+            if(mode==DuelMode.AI){roomId=roomProof=RoomTitle="";}
+            Rooms.StopBrowsing();
+            network.NetworkConfig.ConnectionData = roomId.Length>0?DuelRoomAdmission.Encode(roomId,Nickname,roomProof):Encoding.UTF8.GetBytes(NicknamePolicy.Normalize(Nickname));
             leaving = everConnected = false;
             director = join ? null : new DuelDirector(mode, difficulty: Difficulty);
-            if (director != null) director.ShotConfirmed += Publish;
+            if (director != null)
+            {
+                director.ShotConfirmed += Publish;
+                director.PracticeHitConfirmed += (actor,session,shot,headshot)=>
+                {
+                    Publish();
+                    foreach(var player in players.Values)
+                        if(player!=null&&player.IsSpawned&&player.Seat.Value==actor)
+                            player.ReportPracticeHitRpc(director.Game.Round,session,shot,headshot);
+                };
+            }
             sessionAiCount = Mathf.Clamp(AiCount, 1, RouletteRules.MaxPlayers - 1);
             Busy = true;
             connectDeadline = Time.realtimeSinceStartupAsDouble + 15;
@@ -147,17 +165,20 @@ namespace HelloWorld
             bool allowed = ServerGame != null && (host ||
                 (ServerGame.Mode == DuelMode.PvP && director.Stage == DuelStage.Idle && ServerGame.Phase != DuelPhase.Playing && reservations.Count < RouletteRules.MaxPlayers));
             string requestedName = "";
+            string admissionError="";
             try
             {
                 byte[] payload = request.Payload ?? Array.Empty<byte>();
-                if (payload.Length > NicknamePolicy.MaxBytes) allowed = false;
+                if(roomId.Length>0)
+                {if(!DuelRoomAdmission.TryRead(payload,roomId,roomProof,out requestedName,out admissionError))allowed=false;}
+                else if (payload.Length > NicknamePolicy.MaxBytes) allowed = false;
                 else requestedName = NicknamePolicy.Normalize(new UTF8Encoding(false, true).GetString(payload));
             }
             catch (DecoderFallbackException) { allowed = false; }
             response.Approved = allowed;
             response.CreatePlayerObject = allowed;
             response.Pending = false;
-            response.Reason = allowed ? string.Empty : "참가할 수 없습니다. AI 전용이거나 진행 중인 경기 또는 가득 찬 6인 방입니다.";
+            response.Reason = allowed ? string.Empty : admissionError.Length>0?admissionError:"참가할 수 없습니다. 진행 중인 경기 또는 가득 찬 6인 방입니다.";
             if (allowed) { reservations.Add(request.ClientNetworkId); requestedNames[request.ClientNetworkId] = requestedName; }
         }
 
@@ -179,6 +200,15 @@ namespace HelloWorld
                     names[bot] = new FixedString64Bytes(sessionAiCount == 1 ? "AI" : "AI" + bot);
                 }
             Publish();
+            StartCoroutine(ReplayChat(player));
+        }
+        private IEnumerator ReplayChat(HelloWorldPlayer player)
+        {
+            // Wait until the player's spawn has been sent before owner-targeted history RPCs.
+            yield return null;
+            if(network==null||!network.IsServer||player==null||!player.IsSpawned)yield break;
+            foreach(var line in chatLog.History)
+                player.ReceiveChatRpc(line.Sequence,line.Sender,line.Name,line.Message);
         }
 
         private void Publish()
@@ -211,7 +241,8 @@ namespace HelloWorld
                 if(ServerGame.LastDamage>0)
                     foreach(var player in players.Values)
                         if(player!=null && player.IsSpawned && player.Seat.Value==state.LastActor)
-                            player.ReportHitRpc(state.Round,state.ForSeat(state.LastActor).Life,state.Shots);
+                            player.ReportHitRpc(state.Round,state.ForSeat(state.LastActor).Life,state.Shots,
+                                WeaponRules.IsPrecision(ServerGame.LastWeapon)&&state.ForSeat(state.LastActor).LastHitPart==DuelHitPart.Head);
                 for (int victim = 0; victim < RouletteRules.MaxPlayers; victim++)
                 {
                     int damage = ServerGame.LastDamageForSeat(victim);
@@ -227,16 +258,28 @@ namespace HelloWorld
                         if (player != null && player.IsSpawned && player.Seat.Value == victim) player.DeathReport.Value = report;
                 }
                 for (int victim = 0; victim < RouletteRules.MaxPlayers; victim++)
-                    if (RouletteRules.Has(ServerGame.LastKilledMask, victim))
+                    if (RouletteRules.Has(ServerGame.LastKilledMask, victim)||ServerGame.LastWeapon==DuelWeapon.Taser&&RouletteRules.Has(ServerGame.LastHitMask,victim))
                         foreach (var player in players.Values)
                             if (player != null && player.IsSpawned)
-                                player.ReportKillRpc(state.Round, state.Shots, victim, ServerGame.LastWeapon, names[state.LastActor], names[victim],state.ForSeat(victim).Life,state.ForSeat(victim).LivesRemaining,victim==state.LastTarget?state.ForSeat(state.LastActor).LastHitPart:DuelHitPart.None);
+                                player.ReportKillRpc(state.Round, state.Shots, victim, ServerGame.LastWeapon, names[state.LastActor], names[victim],state.ForSeat(victim).Life,state.ForSeat(victim).LivesRemaining,victim==state.LastTarget?state.ForSeat(state.LastActor).LastHitPart:DuelHitPart.None,RouletteRules.Has(ServerGame.LastKilledMask,victim));
             }
             foreach(var player in players.Values)
                 if(player!=null && player.IsSpawned && state.ForSeat(player.Seat.Value).DeathCause==DuelDeathCause.ClockTimeout)
                 {var report=damageReports[player.Seat.Value];report.Round=state.Round;report.Life=state.ForSeat(player.Seat.Value).Life;player.DeathReport.Value=report;}
         }
 
+        public bool RequestChat(ulong sender,FixedString512Bytes message)
+        {
+            if(network==null||!network.IsServer||leaving||ServerGame==null||
+                !players.TryGetValue(sender,out var player)||player==null||!player.IsSpawned||
+                player.OwnerClientId!=sender||player.Seat.Value<0||!RouletteRules.Has(ServerGame.ConnectedMask,player.Seat.Value))return false;
+            if(!chatLog.TryAppend(sender,names[player.Seat.Value],message,ServerNow,out var line))
+            {player.RejectChatRpc();return false;}
+            foreach(var recipient in players.Values)
+                if(recipient!=null&&recipient.IsSpawned)
+                    recipient.ReceiveChatRpc(line.Sequence,line.Sender,line.Name,line.Message);
+            return true;
+        }
         public void RequestInput(ulong sender, int digit, int version)
         {
             if (!network.IsServer || director == null || !players.TryGetValue(sender, out var player) ||
@@ -248,14 +291,17 @@ namespace HelloWorld
             if(!DeveloperMode||network==null || !network.IsHost || director==null || director.Stage!=DuelStage.Idle)return;
             if(director.Game.SetShotTime(seconds))Publish();
         }
-        public void SetRoomStartWithItems(bool enabled)
+        public void RequestLoadoutItem(ulong sender,DuelItem item,int round)
         {
-            if(!DeveloperMode||network==null || !network.IsHost || director==null || director.Stage!=DuelStage.Idle)return;
-            if(director.Game.SetStartWithItems(enabled))Publish();
+            if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||
+                !players.TryGetValue(sender,out var player)||player==null||!player.IsSpawned||player.OwnerClientId!=sender)return;
+            if(director.SelectItem(player.Seat.Value,item))Publish();
         }
 
         public void SetRoomUnlimitedItems(bool enabled)
         {if(!DeveloperMode||network==null||!network.IsHost||director==null||director.Stage!=DuelStage.Idle)return;if(director.Game.SetUnlimitedItems(enabled))Publish();}
+        public void SetRoomAutoSelectItems(bool enabled)
+        {if(!DeveloperMode||network==null||!network.IsHost||director==null||director.Stage!=DuelStage.Idle)return;if(director.SetAutoSelectItems(enabled))Publish();}
         public void SetRoomManualMiniGame(bool enabled)
         {if(!DeveloperMode||network==null||!network.IsHost||director==null||director.Stage!=DuelStage.Idle)return;if(director.Game.SetManualMiniGame(enabled))Publish();}
         public void ToggleDeveloperMode()
@@ -271,13 +317,19 @@ namespace HelloWorld
         {if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||!players.TryGetValue(sender,out var p)||p==null||!p.IsSpawned)return;if(director.UseItem(p.Seat.Value,item,iteration,ServerNow))Publish();}
         public void RequestRematch(ulong sender, int round)
         {
-            if (!network.IsServer || director == null || !players.TryGetValue(sender, out var player) || player == null) return;
+            if (network==null||!network.IsServer||director==null||!players.TryGetValue(sender,out var player)||player==null||!player.IsSpawned||player.OwnerClientId!=sender)return;
             if (round == ServerGame.Round && reservations.Count == players.Count && director.Ready(player.Seat.Value, ServerNow)) Publish();
         }
         public void RequestLook(ulong sender,float yaw,float pitch,bool ads,int round)
         {
             if (!network.IsServer || director==null || round!=ServerGame.Round || !players.TryGetValue(sender,out var p) || p==null || !p.IsSpawned) return;
             if (director.Look(p.Seat.Value,yaw,pitch,ads,ServerNow)) Publish();
+        }
+        public void RequestStopDice(ulong sender,int round,int iteration,int diceRound)
+        {
+            if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||
+                !players.TryGetValue(sender,out var player)||player==null||!player.IsSpawned||player.OwnerClientId!=sender)return;
+            if(director.StopDice(player.Seat.Value,iteration,diceRound,ServerNow))Publish();
         }
         public void RequestStopClock(ulong sender,int round,int iteration,double sample)
         {
@@ -302,6 +354,16 @@ namespace HelloWorld
             // Hit seat, hit part, origin, spread and damage are always calculated by the server.
             if (director.Fire(p.Seat.Value,yaw,pitch,ads,version,shotTime,ServerNow)) Publish();
         }
+        public void RequestInk(ulong sender,float yaw,float pitch,double sample,int round,int iteration,int life,int version)
+        {
+            if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||!players.TryGetValue(sender,out var p)||p==null||!p.IsSpawned||p.OwnerClientId!=sender)return;
+            if(director.ThrowInk(p.Seat.Value,yaw,pitch,iteration,life,version,sample,ServerNow))Publish();
+        }
+        public void RequestQuickItem(ulong sender,bool equip,int round,int iteration,int life,int version)
+        {
+            if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||!players.TryGetValue(sender,out var p)||p==null||!p.IsSpawned||p.OwnerClientId!=sender)return;
+            if(director.SwitchQuickItem(p.Seat.Value,equip,iteration,life,version,ServerNow))Publish();
+        }
         public void RequestWeapon(ulong sender, DuelWeapon weapon, int round)
         {
             if (!network.IsServer || director == null || !players.TryGetValue(sender, out var player) ||
@@ -311,6 +373,7 @@ namespace HelloWorld
         private void Update()
         {
             if (network == null) return;
+            TickRooms();
             if (leaving && !network.IsListening && !network.ShutdownInProgress)
             {
                 Busy = leaving = everConnected = false;
@@ -318,7 +381,7 @@ namespace HelloWorld
                 players.Clear(); reservations.Clear();
             }
             if (Busy && !leaving && !everConnected && Time.realtimeSinceStartupAsDouble > connectDeadline)
-                Fail("연결 시간이 초과되었습니다. IP와 포트, 방화벽을 확인하세요.");
+                Fail("연결 시간이 초과되었습니다. 방 목록을 새로고침해 다시 참가하세요.");
             if (!leaving && network.IsServer && director != null)
             {
                 if (director.Tick(ServerNow)) Publish();
@@ -332,6 +395,7 @@ namespace HelloWorld
 
         private void Disconnected(ulong id)
         {
+            chatLog.Disconnect(id);
             reservations.Remove(id);
             requestedNames.Remove(id);
             if (leaving) return;
@@ -352,10 +416,11 @@ namespace HelloWorld
             }
         }
 
-        private void TransportFailed() => Fail("네트워크 전송 오류가 발생했습니다. 포트를 확인하세요.");
+        private void TransportFailed() => Fail("네트워크 연결 오류가 발생했습니다. 방 목록을 확인하세요.");
         private void Fail(string message)
         {
             Status = message;
+            Rooms.StopHosting();roomId=roomProof=RoomTitle="";
             leaving = true;
             if (network != null && !network.ShutdownInProgress) network.Shutdown();
         }
@@ -365,6 +430,7 @@ namespace HelloWorld
         }
         private void OnDestroy()
         {
+            Rooms.Dispose();
             if (network != null)
             {
                 network.OnClientDisconnectCallback -= Disconnected;

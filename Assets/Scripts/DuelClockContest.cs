@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 namespace HelloWorld
 {
-    public enum ClockPhase : byte { Waiting, Counting, Ranking, Shooting, Returning, Selecting, QuickHands, QuickResults, QuickCountdown, ItemPreparation, Memory }
+    public enum ClockPhase : byte { Waiting, Counting, Ranking, Shooting, Returning, Selecting, QuickHands, QuickResults, QuickCountdown, ItemPreparation, Memory, Dice }
     public enum MiniSignal : byte { Wait, Fake, Go, Burst }
     public enum MiniFailure : byte { None, EarlyInput, MissedSignal, Burst }
     public struct ClockEntry : IEquatable<ClockEntry>
@@ -23,33 +23,49 @@ namespace HelloWorld
         public double StartedAt, PhaseAt, HideAfter;
         public ClockEntry Seat0, Seat1, Seat2, Seat3, Seat4, Seat5;
         public ArrowMemoryState Memory;
+        public DuelDiceState Dice;
         public ClockEntry ForSeat(int seat) => seat==0?Seat0:seat==1?Seat1:seat==2?Seat2:seat==3?Seat3:seat==4?Seat4:seat==5?Seat5:default;
         public void Set(int seat,ClockEntry entry)
         { if(seat==0)Seat0=entry;else if(seat==1)Seat1=entry;else if(seat==2)Seat2=entry;else if(seat==3)Seat3=entry;else if(seat==4)Seat4=entry;else if(seat==5)Seat5=entry; }
-        public bool Equals(ClockState o) => Phase==o.Phase && MiniGame==o.MiniGame && EliminatedMask==o.EliminatedMask && Signal==o.Signal && Points==o.Points && SignalAt==o.SignalAt && Iteration==o.Iteration && ParticipantsMask==o.ParticipantsMask && Target==o.Target && First==o.First && Last==o.Last && StartedAt==o.StartedAt && PhaseAt==o.PhaseAt && HideAfter==o.HideAfter && Memory.Equals(o.Memory) && Seat0.Equals(o.Seat0) && Seat1.Equals(o.Seat1) && Seat2.Equals(o.Seat2) && Seat3.Equals(o.Seat3) && Seat4.Equals(o.Seat4) && Seat5.Equals(o.Seat5);
+        public bool Equals(ClockState o) => Phase==o.Phase && MiniGame==o.MiniGame && EliminatedMask==o.EliminatedMask && Signal==o.Signal && Points==o.Points && SignalAt==o.SignalAt && Iteration==o.Iteration && ParticipantsMask==o.ParticipantsMask && Target==o.Target && First==o.First && Last==o.Last && StartedAt==o.StartedAt && PhaseAt==o.PhaseAt && HideAfter==o.HideAfter && Memory.Equals(o.Memory) && Dice.Equals(o.Dice) && Seat0.Equals(o.Seat0) && Seat1.Equals(o.Seat1) && Seat2.Equals(o.Seat2) && Seat3.Equals(o.Seat3) && Seat4.Equals(o.Seat4) && Seat5.Equals(o.Seat5);
     }
     public sealed class DuelClockContest
     {
         public const double MiniResultsDuration=3;
         public const double RevealDuration=MiniResultsDuration, GreedRevealDuration=MiniResultsDuration, GreedCountdownDuration=3, ShotDuration=10, ReturnDuration=3, QuickResultsDuration=MiniResultsDuration, QuickCountdownDuration=3, ItemPreparationDuration=5;
-        public const int GreedPointsPerSecond=40;
+        public const int GreedMinimum=50,GreedMaximum=150000;
+        public const double GreedDuration=30;
         public static double RevealFor(PartyMiniGame game)=>game==PartyMiniGame.Greed?GreedRevealDuration:RevealDuration;
-        public static int GreedScoreAt(double startedAt,double sample)=>(int)Math.Floor(Math.Max(0,sample-startedAt)*GreedPointsPerSecond);
+        public static int GreedScoreAt(double startedAt,double sample)
+        {
+            double elapsed=sample-startedAt;if(double.IsNaN(elapsed)||elapsed<=0)return 0;if(elapsed>=GreedDuration)return GreedMaximum;
+            double progress=elapsed/GreedDuration;return (int)Math.Floor(GreedMaximum*progress*progress*progress+1e-6);
+        }
+        public static double GreedElapsedAt(double score)=>GreedDuration*Math.Pow(Math.Max(0,Math.Min(GreedMaximum,score))/GreedMaximum,1.0/3);
+        // Cumulative chance by score, sampled once on the server so tick/frame rates cannot change it.
+        public static double GreedBurstChance(double score,int threshold)
+        {
+            if(score<GreedMinimum)return 0;if(score>=threshold)return 1;
+            return Math.Pow((score-GreedMinimum)/(threshold-GreedMinimum),4);
+        }
         public ClockState State { get; private set; }
         private readonly Random random;
         private readonly DuelArrowMemory memory;
+        private readonly DuelDiceContest dice;
         private int stopped;
         private PartyMiniGame? previous;
         private double goAt,burstAt;
+        private int greedThreshold;
         private readonly double[] fakeAt=new double[3];
         private int fakeCount;
         public double ReactionGoAt=>goAt;
         public double GreedBurstAt=>burstAt;
-        public DuelClockContest(Random random) { this.random=random;memory=new DuelArrowMemory(random); }
+        public DuelClockContest(Random random) { this.random=random;memory=new DuelArrowMemory(random);dice=new DuelDiceContest(random); }
         public double Deadline => State.MiniGame==PartyMiniGame.Signal?goAt+2:State.MiniGame==PartyMiniGame.Greed?burstAt:State.StartedAt+State.Target/100.0+2;
         public ClockState PublicState()
         {
             var state=State;
+            state.Dice=state.MiniGame==PartyMiniGame.Memory?memory.Dice:dice.State;
             if(state.MiniGame==PartyMiniGame.Memory)state.Memory=memory.PublicState();
             // Neither other people's stop times nor their stop status is revealed during counting.
             if(state.Phase==ClockPhase.Counting)
@@ -57,11 +73,11 @@ namespace HelloWorld
             return state;
         }
         public static int Quantize(double seconds) => (int)Math.Round(seconds*100,MidpointRounding.AwayFromZero);
-        public void Reset() { State=default;stopped=0;previous=null;memory.Reset(); }
+        public void Reset() { State=default;stopped=0;previous=null;memory.Reset();dice.Reset();greedThreshold=0;goAt=burstAt=0; }
         public void Select(int alive,double now,bool manual=false)
         {
             State=new ClockState{Iteration=State.Iteration+1,ParticipantsMask=alive,MiniGame=manual?PartyMiniGame.Countdown:PartyGames.Choose(random,previous),Phase=ClockPhase.Selecting,PhaseAt=now,First=-1,Last=-1};
-            stopped=0;memory.Reset();
+            stopped=0;memory.Reset();dice.Reset();
         }
         public bool ChooseManual(PartyMiniGame game,double now)
         {if(State.Phase!=ClockPhase.Selecting||!PartyGames.IsValid(game))return false;var s=State;s.MiniGame=game;s.PhaseAt=now;State=s;return true;}
@@ -70,13 +86,17 @@ namespace HelloWorld
             int iteration=State.Phase==ClockPhase.Selecting?State.Iteration:State.Iteration+1;
             var s=new ClockState{Iteration=iteration,MiniGame=game,ParticipantsMask=alive,Target=game==PartyMiniGame.Countdown?random.Next(7,16)*100:0,HideAfter=game==PartyMiniGame.Countdown?2.4+random.NextDouble()*.5:0,StartedAt=now+(game==PartyMiniGame.Greed?GreedCountdownDuration:1),PhaseAt=now,Phase=ClockPhase.Counting,First=-1,Last=-1};
             for(int i=0;i<RouletteRules.MaxPlayers;i++)s.Set(i,new ClockEntry{Centiseconds=-1,Error=-1,Points=-1});
-            State=s;stopped=0;previous=s.MiniGame;
+            State=s;stopped=0;previous=s.MiniGame;dice.Reset();
             if(game==PartyMiniGame.Memory){s.Phase=ClockPhase.Memory;s.StartedAt=now;State=s;memory.Begin(alive,now);SyncMemory(now);return;}
             memory.Reset();
             if(game==PartyMiniGame.Signal)
             {goAt=s.StartedAt+2.5+random.NextDouble()*3.5;fakeCount=random.Next(1,4);for(int i=0;i<fakeCount;i++)fakeAt[i]=s.StartedAt+.6+i*.65+random.NextDouble()*.15;}
             if(game==PartyMiniGame.Greed)
-            {burstAt=s.StartedAt+4+random.NextDouble()*5.5;}
+            {
+                greedThreshold=random.Next(GreedMinimum,GreedMaximum+1);
+                double burstScore=Math.Ceiling(GreedMinimum+(greedThreshold-GreedMinimum)*Math.Pow(random.NextDouble(),.25));
+                burstAt=s.StartedAt+GreedElapsedAt(burstScore);
+            }
         }
         private void BeginQuickHands(double now)
         {var s=State;s.Phase=ClockPhase.QuickHands;s.StartedAt=s.PhaseAt=now;State=s;previous=s.MiniGame;}
@@ -89,23 +109,45 @@ namespace HelloWorld
             if(State.Phase!=ClockPhase.QuickHands || killed==0)return;
             var s=State;var seats=new List<int>();
             for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(killed,i))seats.Add(i);
-            if(seats.Count>1)
-            {
-                int rolls=0;bool unique=false;
-                while(!unique&&rolls<32)
-                {rolls++;int faces=0;unique=true;foreach(int seat in seats){var e=s.ForSeat(seat);e.Dice=random.Next(1,7);e.Rolls=rolls;s.Set(seat,e);if((faces&(1<<e.Dice))!=0)unique=false;faces|=1<<e.Dice;}}
-                if(!unique)
-                {var faces=new List<int>{1,2,3,4,5,6};foreach(int seat in seats){int index=random.Next(faces.Count);var e=s.ForSeat(seat);e.Dice=faces[index];e.Rolls=rolls+1;s.Set(seat,e);faces.RemoveAt(index);}}
-                seats.Sort((a,b)=>s.ForSeat(b).Dice.CompareTo(s.ForSeat(a).Dice));
-            }
-            for(int i=0;i<seats.Count;i++){var e=s.ForSeat(seats[i]);e.Rank=survivors+i+1;s.Set(seats[i],e);}
+            // Equal death batches stay tied until the quick-hands round has ended.
+            for(int i=0;i<seats.Count;i++){var e=s.ForSeat(seats[i]);e.Rank=survivors+1;s.Set(seats[i],e);}
             if(s.Last<0)s.Last=seats[seats.Count-1];
             State=s;
         }
         public void FinishQuick(int winner,int loser,double now)
         {
-            var s=State;s.Phase=ClockPhase.QuickResults;s.PhaseAt=now;s.First=winner;s.Last=loser;s.EliminatedMask=loser>=0?1<<loser:0;
+            var s=State;s.First=winner;s.Last=loser;
             if(winner>=0){var e=s.ForSeat(winner);e.Rank=1;s.Set(winner,e);}State=s;
+            var order=new List<int>();for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(s.ParticipantsMask,i))order.Add(i);
+            BeginDiceRanking(order,i=>s.ForSeat(i).Rank>0?s.ForSeat(i).Rank:int.MaxValue,now);
+        }
+        public bool HasQuickTies
+        {get{for(int a=0;a<RouletteRules.MaxPlayers;a++)if(RouletteRules.Has(State.ParticipantsMask,a)&&State.ForSeat(a).Rank>0)for(int b=a+1;b<RouletteRules.MaxPlayers;b++)if(RouletteRules.Has(State.ParticipantsMask,b)&&State.ForSeat(a).Rank==State.ForSeat(b).Rank)return true;return false;}}
+        void BeginDiceRanking(List<int> order,Func<int,int> key,double now)
+        {
+            order.Sort((a,b)=>key(a).CompareTo(key(b)));var groups=new List<List<int>>();
+            for(int begin=0;begin<order.Count;)
+            {int end=begin+1;while(end<order.Count&&key(order[end])==key(order[begin]))end++;groups.Add(order.GetRange(begin,end-begin));begin=end;}
+            if(dice.Begin(groups,now,State.MiniGame==PartyMiniGame.Greed)){var s=State;s.Phase=ClockPhase.Dice;s.PhaseAt=now;s.Dice=dice.State;State=s;}
+            else FinishDiceRanking(now);
+        }
+        void FinishDiceRanking(double now)
+        {
+            var s=State;var order=dice.Order;bool quick=s.MiniGame==PartyMiniGame.QuickHands;
+            for(int rank=0;rank<order.Count;rank++)
+            {int seat=order[rank];var e=s.ForSeat(seat);var roll=dice.State.ForSeat(seat);e.Rank=rank+1;e.Dice=roll.Face;e.Rolls=roll.Rolls;s.Set(seat,e);}
+            // Failed ties still earn a shooting opportunity; countdown timeouts never enter this order.
+            if(!quick)s.First=order.Count>0?order[0]:-1;
+            else if(!order.Contains(s.First))s.First=-1;
+            s.Last=order.Count>1?order[order.Count-1]:-1;
+            if(quick)s.EliminatedMask=s.Last>=0?1<<s.Last:0;
+            s.Dice=dice.State;s.Phase=quick?ClockPhase.QuickResults:ClockPhase.Ranking;s.PhaseAt=now;State=s;
+        }
+        public bool StopDice(int seat,int iteration,int round,double now)
+        {
+            if(State.Phase!=ClockPhase.Dice||iteration!=State.Iteration)return false;
+            if(State.MiniGame==PartyMiniGame.Memory){if(!memory.StopDice(seat,round,now))return false;SyncMemory(now);return true;}
+            if(!dice.Stop(seat,round,now))return false;var s=State;s.Dice=dice.State;State=s;return true;
         }
         public int ScoreAt(double sample)=>GreedScoreAt(State.StartedAt,sample);
         public int MemoryProgress(int seat)=>seat<0||seat>=RouletteRules.MaxPlayers?0:memory.State.ForSeat(seat).Count;
@@ -117,7 +159,8 @@ namespace HelloWorld
         }
         private void SyncMemory(double now)
         {
-            var s=State;s.Memory=memory.State;
+            var s=State;s.Memory=memory.State;s.Dice=memory.Dice;
+            if(s.Memory.Phase==ArrowMemoryPhase.Dice){s.Phase=ClockPhase.Dice;s.PhaseAt=now;}
             if(s.Memory.Phase==ArrowMemoryPhase.Finished&&s.Phase!=ClockPhase.Ranking)
             {
                 s.Phase=ClockPhase.Ranking;s.PhaseAt=now;s.First=s.Memory.Winner;s.Last=-1;int worstRank=0;
@@ -171,38 +214,13 @@ namespace HelloWorld
             var s=State;var order=new List<int>();s.EliminatedMask=s.MiniGame==PartyMiniGame.Countdown?s.ParticipantsMask&~stopped:0;
             for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(s.MiniGame==PartyMiniGame.Countdown?s.ParticipantsMask&stopped:s.ParticipantsMask,i))order.Add(i);
             int Key(int i) => s.ForSeat(i).Failure!=MiniFailure.None||s.ForSeat(i).Centiseconds<0?int.MaxValue:s.ForSeat(i).Error;
-            order.Sort((a,b)=>Key(a).CompareTo(Key(b)));
-            for(int begin=0;begin<order.Count;)
-            {
-                int end=begin+1;while(end<order.Count&&Key(order[end])==Key(order[begin]))end++;
-                if(end-begin>1)
-                {
-                    int rolls=0;bool unique=false;
-                    while(!unique&&rolls<32)
-                    {
-                        rolls++;int faces=0;unique=true;
-                        for(int k=begin;k<end;k++)
-                        {int seat=order[k];var e=s.ForSeat(seat);e.Dice=random.Next(1,7);e.Rolls=rolls;s.Set(seat,e);if((faces&(1<<e.Dice))!=0)unique=false;faces|=1<<e.Dice;}
-                    }
-                    if(!unique)
-                    {
-                        // A pathological RNG must not hang the server: draw a final unique d6 face per tied player.
-                        var faces=new List<int>{1,2,3,4,5,6};
-                        for(int k=begin;k<end;k++){int pick=random.Next(faces.Count);var e=s.ForSeat(order[k]);e.Dice=faces[pick];e.Rolls=rolls+1;s.Set(order[k],e);faces.RemoveAt(pick);}
-                    }
-                    order.Sort(begin,end-begin,Comparer<int>.Create((a,b)=>s.ForSeat(b).Dice.CompareTo(s.ForSeat(a).Dice)));
-                }
-                begin=end;
-            }
-            for(int rank=0;rank<order.Count;rank++){var e=s.ForSeat(order[rank]);e.Rank=rank+1;s.Set(order[rank],e);}
-            s.First=order.Count>0&&s.ForSeat(order[0]).Failure==MiniFailure.None?order[0]:-1;s.Last=order.Count>1?order[order.Count-1]:-1;
-            s.Phase=ClockPhase.Ranking;s.PhaseAt=now;State=s;
+            State=s;BeginDiceRanking(order,Key,now);
         }
         public void Return(double now) { var s=State;s.Phase=ClockPhase.Returning;s.PhaseAt=now;State=s; }
-        public bool Tick(double now,int alive,double shotLimit=ShotDuration,bool shotInFlight=false,bool manualSelection=false,bool beginChosenGame=false)
+        public bool Tick(double now,int alive,double shotLimit=ShotDuration,bool shotInFlight=false,bool manualSelection=false,bool beginChosenGame=false,int connected=63)
         {
             var s=State;bool changed=false;
-            int current=s.Phase==ClockPhase.QuickHands||s.Phase==ClockPhase.QuickResults?s.ParticipantsMask:s.ParticipantsMask&(alive|s.EliminatedMask);
+            int current=s.MiniGame==PartyMiniGame.QuickHands?s.ParticipantsMask&connected:s.ParticipantsMask&(alive|s.EliminatedMask);
             if(current!=s.ParticipantsMask)
             {
                 s.ParticipantsMask=current;stopped&=current;State=s;changed=true;
@@ -210,6 +228,14 @@ namespace HelloWorld
                 else if((s.Phase==ClockPhase.Ranking||s.Phase==ClockPhase.Shooting||s.Phase==ClockPhase.ItemPreparation&&s.MiniGame!=PartyMiniGame.QuickHands)&&(!RouletteRules.Has(alive,s.First)||RouletteRules.Count(alive)<2)&&(s.Phase!=ClockPhase.Shooting||!shotInFlight))Return(now);
             }
             s=State;
+            if(s.Phase==ClockPhase.Dice)
+            {
+                if(s.MiniGame==PartyMiniGame.Memory)
+                {if(memory.Tick(now,alive)){SyncMemory(now);return true;}return changed;}
+                if(dice.Tick(now,connected))
+                {if(dice.State.Phase==DuelDicePhase.Finished)FinishDiceRanking(now);else{s=State;s.Dice=dice.State;State=s;}return true;}
+                return changed;
+            }
             if(s.Phase==ClockPhase.Shooting&&!shotInFlight&&(!RouletteRules.Has(alive,s.First)||RouletteRules.Count(alive)<2)){Return(now);return true;}
             if(s.Phase==ClockPhase.Selecting && (beginChosenGame || !manualSelection && now-s.PhaseAt>=PartyGames.SelectionDuration))
             {if(s.MiniGame==PartyMiniGame.QuickHands)PrepareItems(now);else Begin(current,now,s.MiniGame);return true;}

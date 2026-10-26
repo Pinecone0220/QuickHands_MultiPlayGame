@@ -1,0 +1,141 @@
+{
+  "title": "Last Call / 마지막 잔",
+  "bpm": 68,
+  "bars": 32,
+  "seconds": 112.941179138322,
+  "peak_dbfs": -7.330631732940674,
+  "rms_dbfs": -22.362834930419922,
+  "loop_seam_delta": 0.00012447009794414043,
+  "max_adjacent_delta": 0.02317037433385849,
+  "score": [
+    {
+      "bar": 1,
+      "chord": "Dm9"
+    },
+    {
+      "bar": 2,
+      "chord": "G13"
+    },
+    {
+      "bar": 3,
+      "chord": "Cmaj9"
+    },
+    {
+      "bar": 4,
+      "chord": "Fmaj9"
+    },
+    {
+      "bar": 5,
+      "chord": "Bm7b5"
+    },
+    {
+      "bar": 6,
+      "chord": "E7b9"
+    },
+    {
+      "bar": 7,
+      "chord": "Am9"
+    },
+    {
+      "bar": 8,
+      "chord": "A7b9"
+    },
+    {
+      "bar": 9,
+      "chord": "Dm9"
+    },
+    {
+      "bar": 10,
+      "chord": "G13"
+    },
+    {
+      "bar": 11,
+      "chord": "Cmaj9"
+    },
+    {
+      "bar": 12,
+      "chord": "Fmaj9"
+    },
+    {
+      "bar": 13,
+      "chord": "Bm7b5"
+    },
+    {
+      "bar": 14,
+      "chord": "E7b9"
+    },
+    {
+      "bar": 15,
+      "chord": "Am9"
+    },
+    {
+      "bar": 16,
+      "chord": "A7b9"
+    },
+    {
+      "bar": 17,
+      "chord": "Dm9"
+    },
+    {
+      "bar": 18,
+      "chord": "G13"
+    },
+    {
+      "bar": 19,
+      "chord": "Cmaj9"
+    },
+    {
+      "bar": 20,
+      "chord": "Fmaj9"
+    },
+    {
+      "bar": 21,
+      "chord": "Bm7b5"
+    },
+    {
+      "bar": 22,
+      "chord": "E7b9"
+    },
+    {
+      "bar": 23,
+      "chord": "Am9"
+    },
+    {
+      "bar": 24,
+      "chord": "A7b9"
+    },
+    {
+      "bar": 25,
+      "chord": "Dm9"
+    },
+    {
+      "bar": 26,
+      "chord": "G13"
+    },
+    {
+      "bar": 27,
+      "chord": "Cmaj9"
+    },
+    {
+      "bar": 28,
+      "chord": "Fmaj9"
+    },
+    {
+      "bar": 29,
+      "chord": "Bm7b5"
+    },
+    {
+      "bar": 30,
+      "chord": "E7b9"
+    },
+    {
+      "bar": 31,
+      "chord": "Am9"
+    },
+    {
+      "bar": 32,
+      "chord": "A7b9"
+    }
+  ],
+  "source": "Original generated score and synthesis; no external samples."
+}

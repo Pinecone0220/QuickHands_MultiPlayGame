@@ -48,7 +48,7 @@ public sealed class PartyRuntimeQA:MonoBehaviour
                     Check(PartyGames.Count==2 && (c.MiniGame==PartyMiniGame.Countdown||c.MiniGame==PartyMiniGame.QuickHands),"only implemented game selected");
                     double age=now-c.PhaseAt;
                     if(role=="visual" && age>2.5)
-                    {Check(Element("nameplateLayer").style.display.value==DisplayStyle.None,"no nickname overlay on selection");yield return Capture("selected-final");Finish("PASS party visual: selector settles, fades neighbours, no nickname overlay");yield break;}
+                    {Check(Element("nameplateLayer").style.display.value==DisplayStyle.Flex,"nickname overlay persists on selection");yield return Capture("selected-final");Finish("PASS party visual: selector settles, fades neighbours, nickname overlay persists");yield break;}
                     if(role=="host"&&round==1&&c.Iteration==1&&!spinCapture&&age>.4&&age<1.2){spinCapture=true;yield return Capture("spinning");}
                     if(role=="host"&&round==1&&c.Iteration==1&&!settleCapture&&age>2.5&&age<2.95){settleCapture=true;yield return Capture("selected");}
                 }

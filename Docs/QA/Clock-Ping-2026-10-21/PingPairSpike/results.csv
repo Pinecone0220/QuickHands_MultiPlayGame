@@ -1,0 +1,3 @@
+name,seat,record_cs,error_cs,failure,lives
+host,0,1400,0,None,3
+spike,1,1403,3,None,3

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 namespace HelloWorld
 {
-    public enum ArrowMemoryPhase : byte { None, Showing, Input, Results, Finished }
+    public enum ArrowMemoryPhase : byte { None, Showing, Input, Results, Finished, Dice }
     public struct ArrowMemoryEntry : IEquatable<ArrowMemoryEntry>
     {
         public int Count,Errors,Dice,Rolls,Rank;
@@ -26,14 +26,16 @@ namespace HelloWorld
         public const double ShowDuration=3,InputDuration=10,ResultDuration=DuelClockContest.MiniResultsDuration;
         public ArrowMemoryState State { get; private set; }
         readonly Random random;
-        public DuelArrowMemory(Random random){this.random=random;}
+        readonly DuelDiceContest dice;
+        public DuelDiceState Dice=>dice.State;
+        public DuelArrowMemory(Random random){this.random=random;dice=new DuelDiceContest(random);}
         public static int DirectionAt(int seed,int index)
         {
             uint value=unchecked((uint)seed+(uint)(index+1)*0x9e3779b9u);
             value^=value>>16;value*=0x7feb352du;value^=value>>15;value*=0x846ca68bu;value^=value>>16;
             return (int)(value&3);
         }
-        public void Reset(){State=default;}
+        public void Reset(){State=default;dice.Reset();}
         public ArrowMemoryState PublicState()
         {
             var s=State;
@@ -45,6 +47,7 @@ namespace HelloWorld
         }
         public void Begin(int alive,double now)
         {
+            dice.Reset();
             State=new ArrowMemoryState{Round=1,Length=3,ActiveMask=alive&63,Winner=-1};
             Show(now);
             if(RouletteRules.Count(State.ActiveMask)<2)Finish(now);
@@ -71,17 +74,13 @@ namespace HelloWorld
             for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(State.ActiveMask,i)&&!State.ForSeat(i).Locked)return false;
             return true;
         }
-        void Roll(ref ArrowMemoryState s,List<int> tied)
+        public bool StopDice(int seat,int round,double now)=>State.Phase==ArrowMemoryPhase.Dice&&dice.Stop(seat,round,now);
+        void FinishDice(double now)
         {
-            bool unique=false;int rolls=0;
-            while(!unique&&rolls<32)
-            {
-                rolls++;int seen=0;unique=true;
-                foreach(int seat in tied){var e=s.ForSeat(seat);e.Dice=random.Next(1,7);e.Rolls=rolls;s.Set(seat,e);if((seen&(1<<e.Dice))!=0)unique=false;seen|=1<<e.Dice;}
-            }
-            if(unique)return;
-            var faces=new List<int>{1,2,3,4,5,6};
-            foreach(int seat in tied){int pick=random.Next(faces.Count);var e=s.ForSeat(seat);e.Dice=faces[pick];e.Rolls=rolls+1;s.Set(seat,e);faces.RemoveAt(pick);}
+            var s=State;var order=dice.Order;
+            for(int i=0;i<order.Count;i++){var e=s.ForSeat(order[i]);var d=dice.State.ForSeat(order[i]);e.Rank=i==0?1:2;e.Dice=d.Face;e.Rolls=d.Rolls;s.Set(order[i],e);}
+            s.EliminatedMask|=order.Count>0?s.ActiveMask&~(1<<order[0]):s.ActiveMask;
+            s.ActiveMask=order.Count>0?1<<order[0]:0;State=s;Finish(now);
         }
         void Resolve(double now)
         {
@@ -93,34 +92,20 @@ namespace HelloWorld
                 if(e.Errors==worst&&worst>0)tied.Add(i);
             }
             s.EliminatedMask=0;
-            // A tie between incorrect records ends this mini-game now, in any round.
-            // Fewer errors rank first; dice order only the equal-error groups.
-            bool tiedMistakes=false;
-            for(int a=0;a<RouletteRules.MaxPlayers;a++)if(RouletteRules.Has(s.ActiveMask,a)&&s.ForSeat(a).Errors>0)
-                for(int b=a+1;b<RouletteRules.MaxPlayers;b++)if(RouletteRules.Has(s.ActiveMask,b)&&s.ForSeat(a).Errors==s.ForSeat(b).Errors)tiedMistakes=true;
-            if(tiedMistakes)
+            // Only a tie across every remaining incorrect record needs dice for first place.
+            // Lower tied records are eliminated; the remaining players keep the ongoing rounds.
+            if(worst>0&&tied.Count==RouletteRules.Count(s.ActiveMask))
             {
-                var order=new List<int>();for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(s.ActiveMask,i))order.Add(i);
-                var rankState=s;order.Sort((a,b)=>rankState.ForSeat(a).Errors.CompareTo(rankState.ForSeat(b).Errors));
-                for(int begin=0;begin<order.Count;)
-                {
-                    int end=begin+1;while(end<order.Count&&s.ForSeat(order[end]).Errors==s.ForSeat(order[begin]).Errors)end++;
-                    if(end-begin>1)
-                    {
-                        var group=order.GetRange(begin,end-begin);Roll(ref s,group);rankState=s;
-                        order.Sort(begin,end-begin,Comparer<int>.Create((a,b)=>rankState.ForSeat(b).Dice.CompareTo(rankState.ForSeat(a).Dice)));
-                    }
-                    begin=end;
-                }
-                for(int i=0;i<order.Count;i++){var e=s.ForSeat(order[i]);e.Rank=i+1;s.Set(order[i],e);}
-                s.EliminatedMask=s.ActiveMask&~(1<<order[0]);s.ActiveMask=1<<order[0];State=s;Finish(now);return;
+                s.Phase=ArrowMemoryPhase.Dice;s.PhaseAt=now;State=s;
+                dice.Begin(new List<List<int>>{tied},now,true);return;
             }
             if(worst>0)
             {
-                if(tied.Count>1)Roll(ref s,tied);
-                int loser=tied[0];foreach(int seat in tied)if(s.ForSeat(seat).Dice<s.ForSeat(loser).Dice)loser=seat;
-                var e=s.ForSeat(loser);e.Rank=RouletteRules.Count(s.ActiveMask);s.Set(loser,e);
-                s.ActiveMask&=~(1<<loser);s.EliminatedMask=1<<loser;
+                foreach(int loser in tied)
+                {
+                    var e=s.ForSeat(loser);e.Rank=2;s.Set(loser,e);
+                    s.ActiveMask&=~(1<<loser);s.EliminatedMask|=1<<loser;
+                }
             }
             s.Phase=ArrowMemoryPhase.Results;s.PhaseAt=now;State=s;
             if(RouletteRules.Count(s.ActiveMask)<2)Finish(now);
@@ -137,8 +122,7 @@ namespace HelloWorld
             bool changed=false;int gone=s.ActiveMask&~alive;
             if(gone!=0)
             {
-                int rank=RouletteRules.Count(s.ActiveMask);
-                for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(gone,i)){var e=s.ForSeat(i);e.Rank=rank--;s.Set(i,e);}
+                for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(gone,i)){var e=s.ForSeat(i);e.Rank=2;s.Set(i,e);}
                 s.ActiveMask&=alive;s.RoundMask&=alive;s.EliminatedMask&=alive;State=s;changed=true;
                 if(RouletteRules.Count(s.ActiveMask)<2){Finish(now);return true;}
                 if(s.Phase==ArrowMemoryPhase.Input&&AllLocked()){Resolve(now);return true;}
@@ -146,6 +130,8 @@ namespace HelloWorld
             if(s.Phase==ArrowMemoryPhase.Showing&&now>=s.PhaseAt+ShowDuration)
             {s.Phase=ArrowMemoryPhase.Input;s.PhaseAt=now;s.InputEndsAt=now+InputDuration;State=s;return true;}
             if(s.Phase==ArrowMemoryPhase.Input&&now>=s.InputEndsAt){Resolve(now);return true;}
+            if(s.Phase==ArrowMemoryPhase.Dice&&dice.Tick(now,alive))
+            {if(dice.State.Phase==DuelDicePhase.Finished)FinishDice(now);return true;}
             if(s.Phase==ArrowMemoryPhase.Results&&now>=s.PhaseAt+ResultDuration)
             {s.Round++;s.Length++;State=s;Show(now);return true;}
             return changed;

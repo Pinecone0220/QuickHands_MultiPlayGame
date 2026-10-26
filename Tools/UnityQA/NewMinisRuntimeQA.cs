@@ -63,7 +63,7 @@ public sealed class NewMinisRuntimeQA:MonoBehaviour
         double start=p.State.Value.Clock.StartedAt;yield return null;
         Check(start-p.State.Value.Clock.PhaseAt==3&&Now<start,"greed has three-second preparation on every peer");
         Check(V<VisualElement>("quickStartLayer").style.display.value==DisplayStyle.Flex&&V<Label>("quickStartTitle").text=="욕심의 대가","greed countdown uses centered start panel");
-        Check(V<VisualElement>("nameplateLayer").style.display.value==DisplayStyle.None,"nameplates do not overlap start countdown");
+        Check(V<VisualElement>("nameplateLayer").style.display.value==DisplayStyle.Flex,"nameplates persist during start countdown");
         typeof(RouletteView).GetMethod("StopClock",F).Invoke(view,null);Check(!V<bool>("clockStopped"),"countdown input cannot bank score");
         if(role=="witness")yield return Capture("greed-countdown");
         if(role=="host"){while(Now<start+.9)yield return null;yield return Press();Check(V<bool>("clockStopped")&&V<int>("clockRecord")>0,"host banks points through input gateway");}
@@ -85,7 +85,7 @@ public sealed class NewMinisRuntimeQA:MonoBehaviour
         Mark("checked");while(!Seen("host","checked")||!Seen("client","checked")||!Seen("witness","checked"))yield return null;
         Finish("PASS new minis "+role+": "+checks+" input/privacy/6-seat/results/items/shot/lives/roulette/UI checks");
     }
-    void CheckOwnRow(){Check(V<VisualElement>("nameplateLayer").style.display.value==DisplayStyle.None,"nameplates do not overlap mini results");int own=0;foreach(var r in V<Label[]>("clockRankingEntries"))if(r.ClassListContains("clock-ranking-own")&&r.style.display.value!=DisplayStyle.None){own++;Check(r.text.Contains("나 · "),"own result highlighted");}Check(own==1,"exactly one own record");}
+    void CheckOwnRow(){Check(V<VisualElement>("nameplateLayer").style.display.value==DisplayStyle.Flex,"nameplates persist during mini results");int own=0;foreach(var r in V<Label[]>("clockRankingEntries"))if(r.ClassListContains("clock-ranking-own")&&r.style.display.value!=DisplayStyle.None){own++;Check(r.text.Contains("나 · "),"own result highlighted");}Check(own==1,"exactly one own record");}
     IEnumerator Capture(string label)
     {
         var doc=FindFirstObjectByType<UIDocument>();int w=1200,h=800;var target=new RenderTexture(w,h,24);target.Create();doc.panelSettings.scaleMode=PanelScaleMode.ConstantPixelSize;doc.panelSettings.scale=1;doc.panelSettings.targetTexture=target;doc.panelSettings.clearColor=true;doc.panelSettings.colorClearValue=Color.clear;doc.rootVisualElement.style.width=w;doc.rootVisualElement.style.height=h;doc.rootVisualElement.MarkDirtyRepaint();yield return new WaitForSecondsRealtime(.06f);

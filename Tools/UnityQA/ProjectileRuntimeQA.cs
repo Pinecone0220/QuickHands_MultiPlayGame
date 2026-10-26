@@ -134,7 +134,7 @@ public sealed class ProjectileRuntimeQA:MonoBehaviour
         typeof(DuelDirector).GetField("random",F).SetValue(d,rng);var clock=(DuelClockContest)typeof(DuelDirector).GetField("clock",F).GetValue(d);typeof(DuelClockContest).GetField("random",F).SetValue(clock,rng);
         ((Toggle)E("unlimitedShot")).value=true;yield return new WaitForSecondsRealtime(.4f);yield return Capture("host-room-settings");
         p.SelectWeapon(DuelWeapon.SawedOff);p.Rematch();yield return PrepareItems();while(p.State.Value.Clock.Phase!=ClockPhase.QuickCountdown)yield return null;yield return null;
-        Check(E("quickStartLayer").style.display.value==DisplayStyle.Flex&&E("nameplateLayer").style.display.value==DisplayStyle.None,"countdown is clear without overlapping nameplates");yield return Capture("quick-countdown");
+        Check(E("quickStartLayer").style.display.value==DisplayStyle.Flex&&E("nameplateLayer").style.display.value==DisplayStyle.Flex,"countdown preserves player nameplates");yield return Capture("quick-countdown");
         while(p.State.Value.Clock.Phase!=ClockPhase.QuickHands)yield return null;m.GetComponent<DuelFirstPerson>().enabled=false;
         yield return Fire(3,DuelHitPart.Body,true);
         ((double[])typeof(DuelDirector).GetField("nextAi",F).GetValue(d))[1]=double.PositiveInfinity;

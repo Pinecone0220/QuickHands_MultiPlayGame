@@ -16,6 +16,7 @@ namespace HelloWorld
     {
         public const float SeatAdvance=.15f,SeatedDrop=.25f;
         public const float SeatRadius = 4.2f-SeatAdvance, EyeHeight = 1.91f-SeatedDrop, BaseFov = 75f;
+        public const float LookYawLimit=85;
         private const double Deg = Math.PI / 180;
         public static AimVector SeatPosition(int seat) => new AimVector(-(float)Math.Sin(seat*60*Deg)*SeatRadius,0,-(float)Math.Cos(seat*60*Deg)*SeatRadius);
         public static AimVector Forward(int seat) => Direction(seat*60,0);
@@ -27,18 +28,37 @@ namespace HelloWorld
         public static void Angles(AimVector direction,out float yaw,out float pitch)
         { yaw=(float)(Math.Atan2(direction.X,direction.Z)/Deg); pitch=(float)(Math.Atan2(direction.Y,Math.Sqrt(direction.X*direction.X+direction.Z*direction.Z))/Deg); }
         public static bool ValidAngles(float yaw,float pitch) => !float.IsNaN(yaw)&&!float.IsInfinity(yaw)&&!float.IsNaN(pitch)&&!float.IsInfinity(pitch)&&Math.Abs(yaw)<=720&&Math.Abs(pitch)<=65;
+        public static float RelativeYaw(int seat,float yaw)
+        {
+            float angle=(yaw-seat*60)%360;
+            if(angle>180)angle-=360;else if(angle<-180)angle+=360;
+            return angle;
+        }
+        public static float MoveLookYaw(int seat,float yaw,float delta)
+        {
+            // Clamp mouse travel before sway/spread, without wrapping a large motion to the other side.
+            float angle=seat*60+Math.Max(-LookYawLimit,Math.Min(LookYawLimit,RelativeYaw(seat,yaw)+delta));
+            angle%=360;return angle<0?angle+360:angle;
+        }
+        public static bool ValidSeatAngles(int seat,float yaw,float pitch)=>seat>=0&&seat<RouletteRules.MaxPlayers&&ValidAngles(yaw,pitch)&&Math.Abs(RelativeYaw(seat,yaw))<=LookYawLimit+.001f;
         public static void Sway(int seat,bool ads,double now,double started,out float yaw,out float pitch)
             => Sway(seat,DuelWeapon.Revolver,ads,now,started,out yaw,out pitch);
         public static void Sway(int seat,DuelWeapon weapon,bool ads,double now,double started,out float yaw,out float pitch)
         {
-            // ADS and its duration never reduce sway, including for future weapons.
-            float strength=weapon==DuelWeapon.Taser?1.8f*1.75f*.1f:1.8f*(weapon==DuelWeapon.SawedOff?1.75f:3.5f);
+            yaw=pitch=0;
+            if(!ads||!WeaponRules.SupportsAds(weapon))return;
+            // Hip fire has spread, but no weapon sway. ADS retains each weapon's full amplitude.
+            float strength=weapon==DuelWeapon.Taser?1.8f*1.75f*.1f:1.8f*(weapon==DuelWeapon.BAS?5f:weapon==DuelWeapon.SawedOff?1.75f:3.5f);
             yaw=(float)(Math.Sin(now*7.1+seat*1.7)*strength);
             pitch=(float)(Math.Sin(now*5.3+seat*.9)*strength*.7);
         }
         public const int ShotgunPellets = 37;
         public const float ProjectileSpeed = 40f, ProjectileRange = 20f;
-        public static float Spread(DuelWeapon weapon,bool ads) => weapon==DuelWeapon.Taser?0:weapon==DuelWeapon.SawedOff?(ads?3f:6f):(ads?.65f:4.5f);
+        public static float Spread(DuelWeapon weapon,bool ads) => weapon==DuelWeapon.SawedOff?6:ads||weapon==DuelWeapon.Taser?0:WeaponRules.IsPrecision(weapon)?70:10;
+        // Both precision weapons use the same centre-excluding hip-fire annulus.
+        public static float PrecisionSpreadRadius(DuelWeapon weapon,bool ads,double sample)
+            =>Spread(weapon,ads)*(float)Math.Sqrt(!ads?.25+.75*sample:sample);
+        public static float ShotRange(DuelWeapon weapon,bool ads)=>ProjectileRange;
         private static AimVector Unit(AimVector v) => v*(1/(float)Math.Sqrt(AimVector.Dot(v,v)));
         private static uint Mix(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;return x^(x>>16);}
         // The server chooses a new seed per shot; clients reproduce its random circular pattern.
@@ -54,11 +74,19 @@ namespace HelloWorld
         public static float CentreScore(int actor,int target,AimVector centre)=>AimVector.Dot(Unit(Point(target,DuelHitPart.Body)-Eye(actor)),centre);
         public static AimVector MuzzleOrigin(int seat,DuelWeapon weapon,bool ads,AimVector centre)
         {
+            ads&=WeaponRules.SupportsAds(weapon);
+            // Scoped/iron-sight shots follow the actual view ray without parallax or target attraction.
+            if(ads)return Eye(seat)+centre*.08f;
+            return RenderMuzzleOrigin(seat,weapon,false,centre);
+        }
+        public static AimVector RenderMuzzleOrigin(int seat,DuelWeapon weapon,bool ads,AimVector centre)
+        {
+            ads&=WeaponRules.SupportsAds(weapon);
             bool saw=weapon==DuelWeapon.SawedOff;
             var right=Unit(new AimVector(centre.Z,0,-centre.X));
             var up=new AimVector(centre.Y*right.Z,centre.Z*right.X-centre.X*right.Z,-centre.Y*right.X);
-            float sightY=(.075f+(saw?.15f:.10f)*.6f+.0175f)*.78f;bool taser=weapon==DuelWeapon.Taser;
-            return Eye(seat)+centre*((ads?(saw?.90f:taser?.5f:.65f):.75f)+(saw?.90f:taser?.35f:.72f)*.78f)+
+            float sightY=(.075f+(saw?.15f:.10f)*.6f+.0175f)*.78f;bool taser=weapon==DuelWeapon.Taser,bas=weapon==DuelWeapon.BAS;
+            return Eye(seat)+centre*((ads?(bas?.65f:saw?.90f:taser?.5f:.65f):.75f)+(bas?1.34f:saw?.90f:taser?.35f:.72f)*(bas?.60f:.78f))+
                 up*((ads?-sightY:-.23f)+.075f*.78f)+right*(ads?0:.28f);
         }
         public static DuelRayHit TraceShotgun(int actor,int alive,AimVector centre,float halfAngle,int seed=0,DuelTabletopState? props=null)
@@ -75,7 +103,7 @@ namespace HelloWorld
             // Preserve the physical contact region for the kill feed; damage is uniform.
             return best;
         }
-        public static float AdsFov(DuelWeapon weapon) => weapon==DuelWeapon.Taser?BaseFov:(float)(2*Math.Atan(Math.Tan(BaseFov*Deg/2)/(weapon==DuelWeapon.SawedOff?1.2:1.4))/Deg);
+        public static float AdsFov(DuelWeapon weapon) => !WeaponRules.SupportsAds(weapon)||weapon==DuelWeapon.Taser?BaseFov:(float)(2*Math.Atan(Math.Tan(BaseFov*Deg/2)/(weapon==DuelWeapon.BAS?3:1.4))/Deg);
         private static float Sphere(AimVector origin,AimVector direction,AimVector centre,float radius)
         {
             var oc=origin-centre; float b=AimVector.Dot(oc,direction), c=AimVector.Dot(oc,oc)-radius*radius, disc=b*b-c;
@@ -159,40 +187,42 @@ namespace HelloWorld
     // A shotgun volley gathers pellet contacts, then chooses one central direct victim.
     public sealed class DuelProjectileVolley
     {
-        public readonly int Actor, Life, Iteration;
+        public readonly int Actor, Life, Iteration,EligibleMask,Sequence;
         public readonly DuelWeapon Weapon;
         public readonly double StartedAt;
         private readonly AimVector origin, centre;
         private readonly AimVector[] rays;
         private readonly bool[] stopped;
         private readonly DuelRayHit[] contacts;
-        public DuelProjectileVolley(int actor,int life,int iteration,DuelWeapon weapon,AimVector origin,AimVector centre,float spread,int seed,double now)
+        private readonly float range;
+        public DuelProjectileVolley(int actor,int life,int iteration,DuelWeapon weapon,AimVector origin,AimVector centre,float spread,int seed,double now,int eligibleMask=63,int sequence=0)
         {
-            Actor=actor;Life=life;Iteration=iteration;Weapon=weapon;StartedAt=now;this.origin=origin;this.centre=centre;
+            Actor=actor;Life=life;Iteration=iteration;Weapon=weapon;StartedAt=now;this.origin=origin;this.centre=centre;EligibleMask=eligibleMask;Sequence=sequence;
+            range=DuelGunplay.ShotRange(weapon,spread==0);
             int count=weapon==DuelWeapon.SawedOff?DuelGunplay.ShotgunPellets:1;
             rays=new AimVector[count];stopped=new bool[count];contacts=new DuelRayHit[count];
             for(int i=0;i<count;i++){rays[i]=count==1?centre:DuelGunplay.PelletDirection(centre,spread,i,seed);contacts[i].Seat=-1;}
         }
-        public bool Tick(int alive,double now,out DuelRayHit result,DuelTabletop tabletop=null)
+        public bool Tick(int alive,double now,out DuelRayHit result,DuelTabletop tabletop=null,DuelTabletopState? staticProps=null)
         {
             float travel=(float)System.Math.Max(0,now-StartedAt)*DuelGunplay.ProjectileSpeed;
             bool allStopped=true;
             for(int i=0;i<rays.Length;i++)
             {
                 if(stopped[i])continue;
-                var hit=DuelGunplay.TraceFrom(Actor,alive,origin,rays[i],tabletop==null?(DuelTabletopState?)null:tabletop.State);
-                if(hit.Distance<=System.Math.Min(travel,DuelGunplay.ProjectileRange))
+                var hit=DuelGunplay.TraceFrom(Actor,alive,origin,rays[i],staticProps??(tabletop==null?(DuelTabletopState?)null:tabletop.State));
+                if(hit.Distance<=System.Math.Min(travel,range))
                 {
                     if(hit.Prop!=DuelTableProp.None&&tabletop!=null)tabletop.Break(hit.PropSeat,hit.Prop,now);
                     contacts[i]=hit;stopped[i]=true;
                 }
-                else if(travel>=DuelGunplay.ProjectileRange)stopped[i]=true;
+                else if(travel>=range)stopped[i]=true;
                 allStopped&=stopped[i];
             }
             result=new DuelRayHit{Seat=-1,Part=DuelHitPart.None};
             // Every seated player is within 11.2m of a muzzle. Wait for all possible body contacts,
             // rather than favouring the first/nearest pellet over the screen-centred opponent.
-            if(!allStopped && travel<(Weapon==DuelWeapon.SawedOff?11.2f:DuelGunplay.ProjectileRange))return false;
+            if(!allStopped && travel<System.Math.Min(range,Weapon==DuelWeapon.SawedOff?11.2f:DuelGunplay.ProjectileRange))return false;
             float best=float.NegativeInfinity;
             foreach(var hit in contacts)
             {

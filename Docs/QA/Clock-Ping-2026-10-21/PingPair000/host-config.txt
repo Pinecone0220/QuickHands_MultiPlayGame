@@ -1,0 +1,4 @@
+target_cs=900
+hide_s=2.8081232538018948
+display_mismatches=0
+ranking_observed=True

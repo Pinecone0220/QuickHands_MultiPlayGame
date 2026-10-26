@@ -52,10 +52,11 @@ namespace HelloWorld
             source.pitch=report?1:.98f+variation*.005f;
             source.PlayOneShot(clip,gain);Played?.Invoke(seat,key);
         }
-        private static string Prefix(DuelWeapon w)=>w==DuelWeapon.SawedOff?"Saw":w==DuelWeapon.Taser?"Taser":"Revolver";
+        private static string Prefix(DuelWeapon w)=>w==DuelWeapon.BAS?"Bas":w==DuelWeapon.SawedOff?"Saw":w==DuelWeapon.Taser?"Taser":"Revolver";
         private static string Mechanism(DuelWeapon w,DuelAction action)
         {
             if(w==DuelWeapon.Taser)return null;
+            if(w==DuelWeapon.BAS)return action==DuelAction.OpenBarrel||action==DuelAction.CloseBarrel?"BasBolt":action==DuelAction.Pickup?"BasPickup":null;
             string prefix=Prefix(w);
             switch(action)
             {
@@ -90,10 +91,10 @@ namespace HelloWorld
             {
                 var previous=a.Previous;
                 if(state.Version<previous.Version)return;
-                bool shot=state.ShotsFired>previous.ShotsFired;
+                bool shot=state.ShotSerial>previous.ShotSerial;
                 bool newAction=state.Action!=previous.Action||state.StartedAt!=previous.StartedAt;
                 bool fresh=now-state.StartedAt<.75&&now-state.StartedAt>=-.1;
-                if(state.TaserArmed&&!previous.TaserArmed)Play(seat,a,"TaserSafety",.25f);
+                if(state.TaserArmed&&!previous.TaserArmed||state.QuickEquipped&&state.QuickItem==2&&!previous.QuickEquipped)Play(seat,a,"TaserSafety",.25f);
                 if(active&&!shot&&state.Weapon==DuelWeapon.Taser&&(!a.Active||state.Weapon!=previous.Weapon)&&fresh)
                     Play(seat,a,"TaserDraw",.28f);
                 if(active&&a.Active&&!shot&&state.Weapon==previous.Weapon)
@@ -101,7 +102,7 @@ namespace HelloWorld
                     if(newAction)
                     {
                         // A wrong-code reset is not a completed mechanical action.
-                        bool completed=state.CorrectInputs>previous.CorrectInputs;
+                        bool completed=state.CorrectInputs>previous.CorrectInputs||state.Weapon==DuelWeapon.BAS&&previous.Action==DuelAction.OpenBarrel&&state.Action==DuelAction.Aim&&state.PracticeShotsFired>0&&state.PracticeSession==previous.PracticeSession;
                         if(completed&&fresh)Complete(seat,a,previous);
                         if(state.Action==DuelAction.Aim&&state.Weapon!=DuelWeapon.Taser)
                         {
@@ -119,7 +120,7 @@ namespace HelloWorld
                 }
                 if(shot&&state.FiredAt>=0&&now-state.FiredAt<=.5&&now-state.FiredAt>=-.1)
                 {
-                    int variant=(state.ShotsFired+seat)%3;
+                    int variant=(state.ShotSerial+seat)%3;
                     Play(seat,a,Prefix(state.FiredWeapon)+"Fire"+variant,state.FiredWeapon==DuelWeapon.Taser?.55f:.74f,true);
                 }
                 a.Previous=state;a.Active=active;

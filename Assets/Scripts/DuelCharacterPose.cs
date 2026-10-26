@@ -10,6 +10,7 @@ namespace HelloWorld
         public DuelAction Action;
         public DuelWeapon Weapon;
         public bool Active,GunReady,Aiming,Attentive,Stunned,Winner,ViewModel,Combat;
+        public bool Ink;public float InkAge;
         public float Progress,ActionAge,Recoil,Healing;
         public DuelDrinkAction DrinkAction;
         public float DrinkProgress;
@@ -84,7 +85,13 @@ namespace HelloWorld
                     if(c.Action==DuelAction.Load){p.Lean=-9;p.Roll=-1.3f;}
                     if(c.Action==DuelAction.CloseBarrel){p.Lean=-7;p.Roll=.8f;}
                 }
-                p.Support=c.GunReady&&(c.Weapon==DuelWeapon.SawedOff||c.Aiming)?1:0;p.LeftCurl=p.Support*30;p.Lean+=c.Recoil*3;
+                p.Support=c.GunReady&&(c.Weapon==DuelWeapon.SawedOff||c.Weapon==DuelWeapon.BAS||c.Aiming)?1:0;p.LeftCurl=p.Support*30;p.Lean+=c.Recoil*3;
+            }
+            if(c.Ink)
+            {
+                p.RightChin=p.LeftChin=p.Support=p.Drum=p.Relaxed=0;p.RightCurl=55;p.LeftCurl=15;
+                p.Right=new Vector3(-.28f,.30f,-.4f);p.Left=new Vector3(.28f,.03f,-.38f);
+                p.Lean=-3-(c.InkAge>=0&&c.InkAge<.4f?Mathf.Sin(c.InkAge/.4f*Mathf.PI)*5:0);
             }
             if(c.Healing>0&&!c.Active)
             {

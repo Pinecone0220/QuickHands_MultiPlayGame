@@ -4,7 +4,7 @@ namespace HelloWorld
     // Matches the existing procedural weapon icon style. No UI text is baked into the thumbnails.
     public static class DuelItemArt
     {
-        public static string Name(DuelItem item)=>item==DuelItem.Recovery?"응급 앰플":"테이저건";
+        public static string Name(DuelItem item)=>item==DuelItem.Ink?"먹물팩":item==DuelItem.Recovery?"응급 앰플":"테이저건";
         public static Texture2D Icon(DuelItem item)
             => CreateIcon(item);
         public static Texture2D CreateIcon(DuelItem item)
@@ -13,7 +13,16 @@ namespace HelloWorld
             for(int y=0;y<n;y++)for(int x=0;x<n;x++)
             {
                 Color c=Color.clear;
-                if(item==DuelItem.Recovery)
+                if(item==DuelItem.Ink)
+                {
+                    float width=28*(1-Mathf.Abs(y-57)/85f);
+                    if(y>=25&&y<=86&&Mathf.Abs(x-63)<=width)c=new Color(.19f,.12f,.27f,1);
+                    if(y>=30&&y<=80&&x>=46&&x<=50)c=new Color(.42f,.30f,.53f,1);
+                    if(y>=84&&y<=92&&x>=48&&x<=78)c=new Color(.8f,.67f,.34f,1);
+                    if(y>=92&&y<=104&&Mathf.Abs(x-63)<(106-y)*.7f)c=new Color(.24f,.16f,.33f,1);
+                    if((x-99)*(x-99)+(y-39)*(y-39)<35||(x-30)*(x-30)+(y-92)*(y-92)<20)c=new Color(.30f,.20f,.43f,1);
+                }
+                else if(item==DuelItem.Recovery)
                 {
                     float aura=Mathf.Exp(-Mathf.Pow((Mathf.Sqrt(Mathf.Pow((x-64)*.85f,2)+Mathf.Pow(y-62,2))-43)/7,2));
                     c=new Color(.2f,1,.52f,aura*.32f);

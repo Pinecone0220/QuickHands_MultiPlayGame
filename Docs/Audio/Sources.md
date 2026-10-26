@@ -51,3 +51,56 @@
 | SawFire1 | Shotgun/Gunshots/sfx_wpn_sgn_gunshot_02.wav |
 | RevolverFire2 | Handgun/Gunshots/sfx_wpn_hgn_gunshot_03.wav |
 | SawFire2 | Shotgun/Gunshots/sfx_wpn_sgn_gunshot_03.wav |
+
+## 2026-10-21 리볼버 Snake 팩 교체
+
+사용자 제공 `Assets/Sounds/Snake's SECOND Authentic Gun Sounds`의 MP3를 사용했다. 이 묶음은 앞의 CC0 녹음 및 FreeWeaponSFX와 별개다. `Tools/Import-RevolverAudio.py`가 아래10개 런타임 WAV를 생성한다. 원본의 선행/후행 무음을 정리하고44.1kHz/16bit 모노 변환, 조작 피크0.54/발사0.70과 양끝1ms 페이드를 적용한다. 기존 Unity GUID/재생 이벤트를 보존한다. 이전 `Build-WeaponAudio.py`를 실행했다면 이 가져오기 스크립트를 마지막에 실행한다(numpy/miniaudio 필요).
+
+조작 원본 폴더: `& More/Revolver/32 SW Long/MP3`.
+
+| 런타임 이름 | 원본 파일 | 동작 |
+|---|---|---|
+| RevolverHammer | 32 SW Hammer Cock.mp3 | 격철 당기기 완료 |
+| RevolverUnlock | 32 SW Open Cylinder Part 1.mp3 | 게이트 잠금 해제 완료 |
+| RevolverOpen | 32 SW Open Cylinder Part 2.mp3 | 게이트 열기 완료 |
+| RevolverRod | 32 SW Rotate Cylinder.mp3 | 탄피 제거 단계의 약실 회전 |
+| RevolverEject | 32 SW Eject One Casing.mp3 | 사용한 탄피마다 배출 |
+| RevolverLoad | 32 SW Single Load.mp3 | 한 발씩 장전 완료 |
+| RevolverClose | 32 SW Close Cylinder.mp3 | 조준으로 전환할 때 게이트 닫기 |
+| RevolverFire0/1/2 | Full Sounds/9mm/MP3/9mm Single.mp3 | 세 슬롯 모두 지정한 같은 단발 발사음 |
+
+Open Cylinder Full은 Part1/2와 중복되므로 사용하지 않고, Hammer Decock은 대응 동작이 없어 사용하지 않는다. 집기/조준 자세에는 이 폴더에 대응 음원이 없어 기존 폴리를 유지한다. 스크립트는 나머지 소드오프/테이저/유리 음원과 모든 .meta의 해시가 유지되는지 검사한다. 조작/탄약/피해/프로토콜44는 그대로다. 조작→두 발 삽입→닫기→발사 미리듣기: `Docs/Previews/Revolver-Snake-Preview.wav`.
+
+## 2026-10-22 소드오프 지정 음원 교체
+
+같은 사용자 제공 Snake 팩의 지정 파일3개를 `Tools/Import-SawedOffAudio.py`로 런타임 WAV5개에 적용한다. 변환은 리볼버와 동일한44.1kHz/16bit 모노, 조작 피크0.54/격발0.70, 무음 정리/양끝1ms 페이드다. 기존 GUID와 동작 완료/발사 재생 이벤트를 재사용한다.
+
+| 런타임 이름 | Snake 팩 내 원본 |
+|---|---|
+| SawLoad | & More/Mag Pack/MP3/Single Shotgun Load.mp3 |
+| SawOpen | & More/Bipod/MP3/Bipod Impact One Leg.mp3 |
+| SawFire0/1/2 | Full Sounds/20 Gauge/MP3/20 Gauge Single.mp3 |
+
+격발 세 슬롯은 같은 지정 단발음이다. 나머지 리볼버/테이저/소드오프 조작 음원과 .meta는 해시로 보존을 확인한다. 원본 라이브러리를 재생성할 때는 `Build-WeaponAudio.py` 뒤에 각 무기별 Import 스크립트를 실행한다. 미리듣기는 배럴 열기→탄 삽입→격발 순서의 `Docs/Previews/SawedOff-Snake-Preview.wav`다.
+
+## 배경음악 (2026-10-20)
+Last Call / 마지막 잔: Tools/Build-BarMusic.py에서 작곡한 코드 진행·선율과 절차적 악기 합성으로 생성. 외부 음악 샘플 없음. 상세는 Docs/Audio/LastCall.md 참조.
+
+## UI/미니게임 효과음 (2026-10-20)
+Tools/Build-GameFeedback.py에서 외부 샘플 없이 11종을 합성했고, 2026-10-21에 CountdownTick(0.10초)/CountdownStart(0.24초) 자체 합성2종을 추가해13종이다. 대응 이벤트와 재생 정책은 Docs/Audio/GameFeedback.md 참조.
+
+## 명중 확인음 (2026-10-21)
+사용자가 오버워치와 같은 소리를 요청해 기존 합성음을 외부 음원으로 교체했다. 출처: [DrAbcOfficial/HitSound의 Overwatch hit.ogg](https://github.com/DrAbcOfficial/HitSound/blob/dd1a312fdd2de6597782cf793795eb3d9dd81f22/Contents/mods/HitSound/42/media/sound/HitSound/overwatch/hit.ogg). 커뮤니티 배포본이므로 블리자드 원본과 바이트 동일 여부는 별도 검증하지 않았다. 이 음원은 위 CC0 녹음 및 자체 합성11종과 별개인 제3자 게임 음원이며 해당 저장소에서 재배포 라이선스를 확인하지 못했다.
+
+고정 커밋: `dd1a312fdd2de6597782cf793795eb3d9dd81f22`. 원본 SHA256: `e328fa1b16a9dad4caab785691172b1a34b21624b77df2b3e0affd715b45bf6c`. `Temp/HitFeedbackSources/OverwatchHit.ogg`에 캐시하며 Build-GameFeedback.py가 검증 후 변환한다(numpy/miniaudio 필요). 일반음은 피크0.60/0.0377초, 머리는 같은 음원을1.35배 높인 피크0.64/0.0279초 파생음이며 실제 오버워치 헤드샷 추출음은 아니다. 출력은44.1kHz/16bit 모노 PCM, 양끝0.5ms 클릭 방지 페이드다. `Resources/GameFeedback`에 포함하며 미리듣기는 `Docs/Previews/HitFeedback-Preview.wav`다.
+
+## BAS 및 소드오프 장전음 (2026-10-22 최신)
+`Tools/Import-BasAudio.py`가 사용자 소유 `Snake's Authentic Gun Sounds` 팩에서 다음 녹음을 변환한다. BAS의 조준/집기 음은 기존 리볼버 녹음을 재사용한다. 기존 총기 WAV/GUID를 유지하고 소드오프의 `SawLoad`만 지정한 새 장전 녹음으로 교체한다.
+
+| 런타임 | 원본 (Assets/Sounds/Snake's Authentic Gun Sounds 아래) |
+|---|---|
+| BasFire0/1/2 | Full Sound/7.62x54R/MP3/762x54r Single MP3.mp3 |
+| BasBolt (열기/닫기 완료) | Reloads, Cycling & More/MP3/Semi 22LR Rack MP3.mp3 |
+| BasLoad / SawLoad | Reloads, Cycling & More/MP3/Pump Shell Load MP3.mp3 |
+
+44.1kHz/16bit 모노 PCM, 무음 여백만 트림/1ms 페이드/발사 피크0.70·조작0.54. 원본 파일은 수정하지 않는다. 위의 과거 `Single Shotgun Load` 지정은 이 항목으로 대체한다. BAS 미리듣기: Docs/Previews/BAS-Audio.wav. 기존 팩의 라이선스 기록을 따른다.

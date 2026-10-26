@@ -34,7 +34,7 @@ public static class ClockBuildChecks
         changed=s;changed.Seat5.Life++;if(s.Equals(changed))throw new Exception("revival life equality");
         changed=s;changed.PartyAliveMask=60;if(s.Equals(changed))throw new Exception("persistent party mask equality");
         changed=s;changed.Seat5.SelectedWeapon=DuelWeapon.Revolver;if(s.Equals(changed))throw new Exception("selected weapon equality");
-        s.Seat5.FiredYaw=143.75f;s.Seat5.FiredPitch=-3.5f;s.Seat5.FiredSpread=6;s.Seat5.FiredAliveMask=63;s.Seat5.FiredSeed=457;s.Seat5.FiredAds=true;s.Seat5.FiredOrigin=new AimVector(1,2,3);s.ShotTimeLimit=7;s.StartWithItems=true;
+        s.Seat5.FiredYaw=143.75f;s.Seat5.FiredPitch=-3.5f;s.Seat5.FiredSpread=6;s.Seat5.FiredAliveMask=63;s.Seat5.FiredSeed=457;s.Seat5.FiredAds=true;s.Seat5.FiredOrigin=new AimVector(1,2,3);s.ShotTimeLimit=7;s.Seat5.SelectedItems=DuelLoadout.All;
         using(var w=new FastBufferWriter(8192,Allocator.Temp)){w.WriteNetworkSerializable(s);using(var r=new FastBufferReader(w,Allocator.Temp)){r.ReadNetworkSerializable(out DuelSnapshot copy);if(!s.Equals(copy))throw new Exception("cosmetic shot ray roundtrip");}}
         changed=s;changed.Seat5.FiredYaw++;if(s.Equals(changed))throw new Exception("shot ray equality");
         changed=s;changed.Seat5.FiredPitch++;if(s.Equals(changed))throw new Exception("shot pitch equality");
@@ -44,7 +44,7 @@ public static class ClockBuildChecks
         changed=s;changed.Seat5.FiredOrigin.X++;if(s.Equals(changed))throw new Exception("shot origin equality");
         changed=s;changed.Seat5.FiredAds=false;if(s.Equals(changed))throw new Exception("shot ads equality");
         changed=s;changed.ShotTimeLimit=0;if(s.Equals(changed))throw new Exception("room limit equality");
-        changed=s;changed.StartWithItems=false;if(s.Equals(changed))throw new Exception("start items setting equality");
+        changed=s;changed.Seat5.SelectedItems=0;if(s.Equals(changed))throw new Exception("starting loadout equality");
         s.Seat5.LoadedMask=21;s.Seat5.SpentMask=10;s.Seat5.NextChamber=3;s.Seat5.ShootingStartedAt=42.5;
         using(var w=new FastBufferWriter(8192,Allocator.Temp)){w.WriteNetworkSerializable(s);using(var r=new FastBufferReader(w,Allocator.Temp)){r.ReadNetworkSerializable(out DuelSnapshot copy);if(!s.Equals(copy)||copy.Seat5.Ammo!=3)throw new Exception("revolver chamber roundtrip");}}
         changed=s;changed.Seat5.LoadedMask=20;if(s.Equals(changed))throw new Exception("loaded chamber equality");

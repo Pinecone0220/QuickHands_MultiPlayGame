@@ -19,25 +19,22 @@
         public int LastTarget { get; private set; } = -1;
         public int Shots { get; private set; }
         public float ShotTimeLimit { get; private set; } = 10;
-        public bool StartWithItems { get; private set; }
         public bool UnlimitedItems { get; private set; }
+        public bool AutoSelectItems { get; private set; }
         public bool ManualMiniGame { get; private set; }
         public bool ResetDeveloperSettings()
         {
-            bool changed=ShotTimeLimit!=10||StartWithItems||UnlimitedItems||ManualMiniGame;
-            ShotTimeLimit=10;StartWithItems=UnlimitedItems=ManualMiniGame=false;return changed;
+            bool changed=ShotTimeLimit!=10||UnlimitedItems||ManualMiniGame||AutoSelectItems;
+            ShotTimeLimit=10;UnlimitedItems=ManualMiniGame=AutoSelectItems=false;return changed;
         }
+        public bool SetAutoSelectItems(bool enabled)
+        {if(Phase==DuelPhase.Playing||AutoSelectItems==enabled)return false;AutoSelectItems=enabled;return true;}
         public bool SetUnlimitedItems(bool enabled)
         {if(Phase==DuelPhase.Playing||UnlimitedItems==enabled)return false;UnlimitedItems=enabled;return true;}
         public bool SetManualMiniGame(bool enabled)
         {if(Phase==DuelPhase.Playing||ManualMiniGame==enabled)return false;ManualMiniGame=enabled;return true;}
         public bool Heal(int seat,int amount)
         {if(Phase!=DuelPhase.Playing||!Has(AliveMask,seat)||amount<=0||health[seat]>=MaxHealth)return false;health[seat]=System.Math.Min(MaxHealth,health[seat]+amount);return true;}
-        public bool SetStartWithItems(bool enabled)
-        {
-            if(Phase==DuelPhase.Playing || StartWithItems==enabled)return false;
-            StartWithItems=enabled;return true;
-        }
         public bool SetShotTime(float seconds)
         {
             if(Phase==DuelPhase.Playing || float.IsNaN(seconds)||float.IsInfinity(seconds) || (seconds!=0&&(seconds<1||seconds>60)) || seconds==ShotTimeLimit)return false;
@@ -63,6 +60,11 @@
         {
             if (Phase == DuelPhase.Playing || !Has(ConnectedMask, seat) || Has(ReadyMask, seat)) return false;
             ReadyMask |= 1 << seat; return true;
+        }
+        public bool CancelReady(int seat)
+        {
+            if(Phase==DuelPhase.Playing||!Has(ConnectedMask,seat)||!Has(ReadyMask,seat))return false;
+            ReadyMask&=~(1<<seat);return true;
         }
         public bool CanStart => Count(ConnectedMask) >= 2 && ReadyMask == ConnectedMask && Phase != DuelPhase.Playing;
         public bool Start()
@@ -96,7 +98,7 @@
         }
         private void Damage(int seat, int amount)
         {
-            if (!Has(AliveMask, seat)) return;
+            if (amount<=0 || !Has(AliveMask, seat)) return;
             LastHitMask |= 1 << seat;
             int dealt = System.Math.Min(health[seat], amount);
             health[seat] -= dealt; LastDamage += dealt;

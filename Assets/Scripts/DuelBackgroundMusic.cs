@@ -1,0 +1,25 @@
+using UnityEngine;
+
+namespace HelloWorld
+{
+    public sealed class DuelBackgroundMusic : MonoBehaviour
+    {
+        private AudioSource music;
+        private void Awake()
+        {
+            music=gameObject.AddComponent<AudioSource>();
+            music.playOnAwake=false;music.loop=true;music.spatialBlend=0;
+            music.priority=220;music.volume=0;
+            music.clip=Resources.Load<AudioClip>("Music/LastCall");
+            if(music.clip!=null)music.Play();
+        }
+        private void Update()
+        {
+            var player=HelloWorldPlayer.Local;
+            bool playing=player!=null&&player.IsSpawned&&player.State.Value.Phase==DuelPhase.Playing;
+            float target=playing?.16f:.28f;
+            music.volume=Mathf.MoveTowards(music.volume,target,Time.unscaledDeltaTime*.13f);
+        }
+        private void OnDestroy(){if(music!=null)music.Stop();}
+    }
+}

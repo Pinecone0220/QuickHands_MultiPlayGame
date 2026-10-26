@@ -1,0 +1,3 @@
+name,seat,record_cs,error_cs,failure,lives
+host,0,900,0,None,3
+client,1,903,3,None,3
