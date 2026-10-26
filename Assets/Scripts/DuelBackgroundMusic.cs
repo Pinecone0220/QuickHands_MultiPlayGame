@@ -10,7 +10,7 @@ namespace HelloWorld
             music=gameObject.AddComponent<AudioSource>();
             music.playOnAwake=false;music.loop=true;music.spatialBlend=0;
             music.priority=220;music.volume=0;
-            music.clip=Resources.Load<AudioClip>("Music/LastCall");
+            music.clip=Resources.Load<AudioClip>("Music/LocalForecastElevator");
             if(music.clip!=null)music.Play();
         }
         private void Update()

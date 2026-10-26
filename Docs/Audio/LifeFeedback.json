@@ -1,0 +1,35 @@
+{
+  "LifeHeartbeat": {
+    "source": "shidenbeatsmusic-heartbeat-sound-effect-111218.mp3",
+    "source_sha256": "8ccf707e629c9f5f26370e8c57a816beb5f4cc3c6bd5032d52ea072e3e6063b7",
+    "source_pulse_windows": [
+      [
+        0.215,
+        0.475
+      ],
+      [
+        0.565,
+        0.825
+      ]
+    ],
+    "beat_interval": 0.65,
+    "beats_per_minute": 92.31,
+    "beats": 3,
+    "pulse_pair_gap": 0.2,
+    "pitch_preserved": true,
+    "loop": false,
+    "duration": 2.0,
+    "peak": 0.68,
+    "rms": 0.0887
+  },
+  "LifeGasp": {
+    "source": "freesound_community-heavy-breath-wheezing-19801.mp3",
+    "source_sha256": "45a846d30b2d11c53f7122af2547773d5c7bf1d780aadc21243a3dd79060e570",
+    "source_start": 0.65,
+    "source_end": 1.9,
+    "single_breath": true,
+    "duration": 1.25,
+    "peak": 0.72,
+    "rms": 0.2558
+  }
+}

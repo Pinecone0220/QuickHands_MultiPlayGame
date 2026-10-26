@@ -16,12 +16,11 @@ namespace HelloWorld
             a.Weapon=selectedWeapons[seat];a.Action=DuelAction.Aim;a.Progress=0;a.SpentMask=0;a.Aiming=false;a.Target=-1;a.Stunned=a.TaserArmed=false;
             a.FiredAt=a.HitAt=-1;a.AimStartedAt=now;actions[seat]=a;lastLook[seat]=now-.1;
         }
-        private void ResetPracticeReadiness(int previousMask,double now)
+        private void InvalidatePracticeFlights()
         {
-            if(previousMask==0)return;
+            // Roster changes must not let an old flight hit a reused seat.
+            // Keep existing players' ready state, aim and reload progress.
             practiceProjectiles.Clear();
-            for(int seat=0;seat<RouletteRules.MaxPlayers;seat++)
-                if(RouletteRules.Has(previousMask&Game.ConnectedMask,seat))ChangePracticeSession(seat,now);
         }
         private bool FirePractice(int seat,float yaw,float pitch,bool ads,int version,double shotTime,double now)
         {

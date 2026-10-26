@@ -104,3 +104,14 @@ Tools/Build-GameFeedback.py에서 외부 샘플 없이 11종을 합성했고, 20
 | BasLoad / SawLoad | Reloads, Cycling & More/MP3/Pump Shell Load MP3.mp3 |
 
 44.1kHz/16bit 모노 PCM, 무음 여백만 트림/1ms 페이드/발사 피크0.70·조작0.54. 원본 파일은 수정하지 않는다. 위의 과거 `Single Shotgun Load` 지정은 이 항목으로 대체한다. BAS 미리듣기: Docs/Previews/BAS-Audio.wav. 기존 팩의 라이선스 기록을 따른다.
+
+## 배경음악 교체 (2026-10-26)
+Local Forecast - Elevator / Kevin MacLeod (incompetech.com), CC BY 3.0. 작곡가 제공 원본 MP3를 적용했으며 메인 출처 표시/빌드 ThirdPartyNotices에 포함한다. 상세: Docs/Audio/LocalForecastElevator.md. 이전 LastCall은 보관만 한다.
+
+## 목숨 차감·복귀 (2026-10-26)
+LifeHeartbeat은 사용자 제공 `shidenbeatsmusic-heartbeat-sound-effect-111218.mp3`의 박동을 사용한다. Tools/Import-LifeHeartbeat.py가0.215~0.475초/0.565~0.825초의 두 타격을 음높이 변경 없이 재배치한다. 박동 주기0.65초(약92 BPM), 한 쌍 내부 간격0.20초,3쌍/총2.00초·피크0.68이다. 쓰러질 때 반복 없이 재생한다. 기존 자체 합성2.55초 심장박동을 대체한다.
+
+LifeGasp은 사용자 제공 `freesound_community-heavy-breath-wheezing-19801.mp3`의0.65~1.90초에서 한 번의 호흡만 추출한1.25초 녹음이다. Tools/Import-LifeBreath.py로44.1kHz/16bit 모노 변환·양끝8ms 페이드·피크0.72를 적용하며 기존 GUID를 유지한다. 일어날 때 소유자에게 반복 없이1회 재생하고 두 소리 모두 리스너의 먹먹함 효과를 우회한다. 원본 파일은 수정하지 않는다. 원본 해시/구간/수치는 Docs/Audio/LifeFeedback.json, 미리듣기는 Docs/Previews/Life-Recovery-Audio.wav다. Build-LifeFeedbackAudio.py는 현재 두 녹음 모두 보존하며 수치와 미리듣기만 다시 만든다.
+
+## 먹물팩 투척·적중 (2026-10-26)
+InkThrow(0.24초, 피크0.40)와 InkImpact(0.36초, 피크0.62)는 Tools/Build-InkAudio.py에서 외부 샘플 없이 합성한 작은 바람/천 스침과 젖은 파열 소리다.44.1kHz/16bit 모노, 소유자의 투척과 피격은2D·타인은3D로 재생한다. 확정 투척의 손에서 놓는 시각과 실제 서버 충돌 시각에1회씩만 재생하며 과거 초기 상태는 무음이다. 지형/테이블에 부딪혀 터져도 충돌음만 나며 플레이어 피해를 만들지 않는다. 미리듣기 Docs/Previews/Ink-Audio.wav, 수치 Docs/Audio/InkAudio.json.

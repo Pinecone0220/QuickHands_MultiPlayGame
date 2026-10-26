@@ -45,8 +45,9 @@ public sealed class ReloadRuntimeQA:MonoBehaviour
         for(int i=0;i<2;i++)
         {
             var p=puppets.GetValue(i);var renderers=(Renderer[])p.GetType().GetField("Renderers").GetValue(p);
-            bool correct=true;foreach(var renderer in renderers)correct&=renderer.forceRenderingOff==(i==seat);
-            Check(correct,"own full avatar hidden and remote avatar visible at seat "+i);
+            var heads=(Renderer[])p.GetType().GetField("HeadRenderers").GetValue(p);
+            bool correct=true;foreach(var renderer in renderers)correct&=renderer.forceRenderingOff==(i==seat&&Array.IndexOf(heads,renderer)>=0);
+            Check(correct,"own body visible, own head hidden and remote avatar visible at seat "+i);
         }
     }
     IEnumerator CheckGaze()

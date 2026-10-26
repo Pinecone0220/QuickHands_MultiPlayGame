@@ -1,7 +1,7 @@
 ﻿namespace HelloWorld
 {
     public enum DuelWeapon : byte { Revolver, SawedOff, Taser, BAS }
-    public enum DuelItem : byte { Recovery, Taser, Ink }
+    public enum DuelItem : byte { Recovery, Taser, Ink, Bullet, NoruFace }
 
     public static class WeaponRules
     {

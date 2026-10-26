@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
@@ -58,7 +58,7 @@ public sealed class AltClickRuntimeQA:MonoBehaviour
         Click(Field<Button>(view,"weaponInfoButton"),EventModifiers.None);
         Check(Field<bool>(view,"weaponInfoOpen"),"normal menu pointer click opens information");
         Click(Field<Button>(view,"weaponInfoClose"),EventModifiers.None);Check(!Field<bool>(view,"weaponInfoOpen"),"normal menu pointer click closes information");
-        manager.CreateRoom("Alt 클릭 검사","");while(HelloWorldPlayer.Local==null)yield return new WaitForSecondsRealtime(.12f);player=HelloWorldPlayer.Local;
+        manager.CreateRoom("Alt 클릭 검사","","ALTCLICK");while(HelloWorldPlayer.Local==null)yield return new WaitForSecondsRealtime(.12f);player=HelloWorldPlayer.Local;
         D.Join(1,Now);Publish();yield return new WaitForSecondsRealtime(.12f);yield return new WaitForSecondsRealtime(.12f);
         var weapons=Field<Button[]>(view,"weaponButtons");Keys(Key.LeftAlt);Click(weapons[1],EventModifiers.Alt);yield return new WaitForSecondsRealtime(.12f);
         Check(D.ForSeat(0).SelectedWeapon==DuelWeapon.SawedOff,"Alt down/up changes actual weapon selection");

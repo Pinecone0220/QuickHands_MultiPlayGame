@@ -27,14 +27,16 @@ public sealed class BarMusicRuntimeQA : MonoBehaviour
         var controller=manager.GetComponent<DuelBackgroundMusic>();
         Check(controller!=null,"music controller present");
         var music=(AudioSource)typeof(DuelBackgroundMusic).GetField("music",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(controller);
-        Check(music.clip!=null&&music.clip.channels==2&&Math.Abs(music.clip.length-112.941)<.1,"stereo score imports at correct duration");
+        Check(music.clip!=null&&music.clip.name=="LocalForecastElevator"&&music.clip.channels==2&&music.clip.length>180&&music.clip.length<200,"requested stereo MP3 imports at correct duration");
         Check(music.clip.loadType==AudioClipLoadType.Streaming,"long score streams instead of decoding whole track in memory");
         Check(music.loop&&music.spatialBlend==0&&music.priority>120,"2D loop leaves priority to weapon sounds");
         Check(music.isPlaying&&Math.Abs(music.volume-.28f)<.01,"menu playback fades in");
         Debug.Log("Bar music menu checks passed");float before=music.time;
         manager.Begin(DuelMode.AI,false,"127.0.0.1","17891");
         Debug.Log("Bar music AI start: "+manager.Status);while(HelloWorldPlayer.Local==null)yield return null;Debug.Log("Bar music local player connected");
-        yield return new WaitForSecondsRealtime(.3f);HelloWorldPlayer.Local.Rematch();Debug.Log("Bar music ready requested");
+        yield return new WaitForSecondsRealtime(.3f);
+        var director=(DuelDirector)typeof(HelloWorldManager).GetField("director",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(manager);
+        director.SetAutoSelectItems(true);HelloWorldPlayer.Local.Rematch();Debug.Log("Bar music ready requested");
         while(HelloWorldPlayer.Local.State.Value.Phase!=DuelPhase.Playing)yield return null;
         yield return new WaitForSecondsRealtime(2);
         Check(music.isPlaying&&music.time>before,"same track continues into the game");

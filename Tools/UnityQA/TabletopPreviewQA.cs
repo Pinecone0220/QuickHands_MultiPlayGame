@@ -75,9 +75,10 @@ public sealed class TabletopPreviewQA:MonoBehaviour
         yield return Capture("Tabletop-Drinking.png",1300,1000);
         var visibility=typeof(RouletteTable).GetMethod("ApplyLocalVisibility",F);
         visibility.Invoke(table,new object[]{0,true,false});
-        foreach(var r in Field<Renderer[]>(puppets.GetValue(0),"Renderers"))Check(r.forceRenderingOff,"own avatar animation is hidden even when its head moves away from the eye");
-        foreach(var r in Field<Renderer[]>(settings.GetValue(0),"BottleRenderers"))Check(r.forceRenderingOff,"own held bottle is hidden in first person");
-        foreach(var r in Field<Renderer[]>(settings.GetValue(0),"GlassRenderers"))Check(r.forceRenderingOff,"own held cup is hidden in first person");
+        var ownHeads=Field<Renderer[]>(puppets.GetValue(0),"HeadRenderers");
+        foreach(var r in Field<Renderer[]>(puppets.GetValue(0),"Renderers"))Check(r.forceRenderingOff==(Array.IndexOf(ownHeads,r)>=0),"own body stays visible while head moves away from the eye");
+        foreach(var r in Field<Renderer[]>(settings.GetValue(0),"BottleRenderers"))Check(!r.forceRenderingOff,"own held bottle is visible in first person");
+        foreach(var r in Field<Renderer[]>(settings.GetValue(0),"GlassRenderers"))Check(!r.forceRenderingOff,"own held cup is visible in first person");
         foreach(var r in Field<Renderer[]>(settings.GetValue(1),"GlassRenderers"))Check(!r.forceRenderingOff,"remote player drinking remains visible");
         var eye=DuelGunplay.Eye(0);cam.transform.position=new Vector3(eye.X,eye.Y,eye.Z);cam.transform.rotation=Quaternion.Euler(15,0,0);cam.fieldOfView=DuelGunplay.BaseFov;
         yield return Capture("Character-First-Person-Clean.png",1300,900);

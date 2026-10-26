@@ -33,9 +33,9 @@ namespace HelloWorld
             var state=p.State.Value;int owner=p.Seat.Value;var own=state.ForSeat(owner);
             bool shooting=state.IsPracticing(owner)||state.Phase==DuelPhase.Playing&&state.Stage==DuelStage.Racing&&state.Alive(owner)&&
                 (state.Clock.Phase==ClockPhase.QuickHands||state.Clock.Phase==ClockPhase.Shooting);
-            if(!shooting||!own.Stunned&&(DuelInk.Busy(own.Ink,now)||own.Action!=DuelAction.Aim&&!(Ads&&own.Weapon==DuelWeapon.Revolver)))
+            if(!shooting||!own.IsStunned(now)&&(DuelInk.Busy(own.Ink,now)||own.Action!=DuelAction.Aim&&!(Ads&&own.Weapon==DuelWeapon.Revolver)))
                 return Quaternion.Euler(-Pitch,Yaw,0);
-            if(own.Stunned)return Quaternion.Euler(-own.AimPitch+Mathf.Sin((float)now*39)*.45f,own.AimYaw+Mathf.Sin((float)now*47)*.6f,Mathf.Sin((float)now*31)*.25f);
+            if(own.IsStunned(now))return Quaternion.Euler(-own.AimPitch+Mathf.Sin((float)now*39)*.45f,own.AimYaw+Mathf.Sin((float)now*47)*.6f,Mathf.Sin((float)now*31)*.25f);
             double start = adsStarted;
             if (own.Aiming) start = own.AimStartedAt;
             DuelGunplay.Sway(owner,own.Weapon, Ads, now, start, out float y, out float x);
@@ -77,13 +77,17 @@ namespace HelloWorld
             }
             if(!Active)
             {
-                Ads=false;if(!recovering&&!falling)MoveLook(Mouse.current);return;
+                Ads=false;if(!recovering&&!falling)MoveLook(Mouse.current);
+                bool idleLook=s.Phase==DuelPhase.Waiting&&s.Stage==DuelStage.Idle||s.Phase==DuelPhase.Playing&&s.Stage==DuelStage.Countdown&&s.Alive(seat);
+                if(idleLook&&time>=nextLook)
+                {p.Look(Yaw,Pitch,false);sentAds=false;nextLook=time+.05;}
+                return;
             }
             captured=true;
             if(!practice&&s.Clock.MiniGame!=PartyMiniGame.QuickHands&&s.Clock.Phase==ClockPhase.Shooting&&(s.Clock.First==seat||own.TaserArmed)&&clockIteration!=s.Clock.Iteration)
             {Yaw=own.AimYaw;Pitch=own.AimPitch;clockIteration=s.Clock.Iteration;}
             var current=s.ForSeat(seat);
-            if(current.Stunned){Yaw=current.AimYaw;Pitch=current.AimPitch;Ads=false;captured=true;SetCursor(true);return;}
+            if(current.IsStunned(time)&&DuelInk.Shooting(s.Clock.Phase)){Yaw=current.AimYaw;Pitch=current.AimPitch;Ads=false;captured=true;SetCursor(true);return;}
             var mouse = Mouse.current;
             bool manualSelecting=!practice&&s.ManualMiniGame&&s.Clock.Phase==ClockPhase.Selecting;
             MoveLook(mouse);

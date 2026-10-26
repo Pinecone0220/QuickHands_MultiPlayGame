@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
@@ -65,7 +65,7 @@ public sealed class DisplayPracticeRuntimeQA:MonoBehaviour
         ClickFullscreen(EventModifiers.None);yield return Resolution(display.width,display.height,true);
         ScreenCapture.CaptureScreenshot(Path.Combine(path,"Menu-Fullscreen.png"));yield return new WaitForSecondsRealtime(.3f);
         ClickFullscreen(EventModifiers.None);yield return Resolution(960,720,false);
-        manager.CreateRoom("시점과 화면 검증","");while(HelloWorldPlayer.Local==null)yield return null;player=HelloWorldPlayer.Local;
+        manager.CreateRoom("시점과 화면 검증","","DISPLAY");while(HelloWorldPlayer.Local==null)yield return null;player=HelloWorldPlayer.Local;
         D.Join(1,Now);D.SetAutoSelectItems(true);Publish();yield return new WaitForSecondsRealtime(.2f);
         Check(Quaternion.Angle(fps.Rotation(Now),BaseRotation())<.001f,"unready lobby camera has no weapon sway");
         D.Ready(0,Now);Publish();yield return new WaitForSecondsRealtime(.2f);

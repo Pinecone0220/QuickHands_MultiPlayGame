@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -28,12 +28,18 @@ namespace HelloWorld
         private static HoverInfo WeaponHoverInfo(DuelWeapon weapon)
         {
             string body=weapon==DuelWeapon.BAS?"레버액션 · 3배율 스코프\n머리만 피해 · 목숨 2개 차감":weapon==DuelWeapon.SawedOff?
-                "빠른 준비 · 단발 산탄\n직격 75 · 양옆 25":$"최대 6발 장전\n머리 {WeaponRules.Damage(weapon,DuelHitPart.Head)} · 몸통 {WeaponRules.Damage(weapon,DuelHitPart.Body)} · 다리 {WeaponRules.Damage(weapon,DuelHitPart.Legs)}";
+                "대난투: 빠른 준비 · 정조준 없음\n직격 75 · 양옆 25":$"대난투: 부분 장전 · 최대 6발\n머리 {WeaponRules.Damage(weapon,DuelHitPart.Head)} · 몸통 {WeaponRules.Damage(weapon,DuelHitPart.Body)} · 다리 {WeaponRules.Damage(weapon,DuelHitPart.Legs)}";
             return new HoverInfo(WeaponRules.Name(weapon),body);
         }
         private static HoverInfo ItemHoverInfo(DuelItem item)=>new HoverInfo(DuelItemArt.Name(item),item==DuelItem.Recovery?
-            "체력 50 회복 · 사용 후 소모":item==DuelItem.Ink?"맞은 상대의 시야를 5초 가립니다.\n소비형 아이템":"피해 5 · 감전으로 조준 방해\n2게임 쿨타임");
+            "체력 50 회복 · 소모성":item==DuelItem.NoruFace?"이번 사격 턴 테이저 피해·감전 면역\n2게임 쿨타임":item==DuelItem.Bullet?"사격자 전용 · 발사 1회 추가\n2개 지급 · 한 턴에 1개 · 소모성":item==DuelItem.Ink?"화면 대부분을 최대 5초 가립니다.\n소모성":"피해 5 · 최대 2초 감전\n2게임 쿨타임");
         private void LateUpdate()
+        {
+            UpdateHoverTip();UpdateInkLayering();
+            // Above the rendered world, below every UI panel (including world-space name labels).
+            crosshair?.SendToBack();
+        }
+        private void UpdateHoverTip()
         {
             if(hoverTip==null)return;
             if(!DuelPointer.HasPlayer||!DuelPointer.AltHeld||Mouse.current==null||root.panel==null)

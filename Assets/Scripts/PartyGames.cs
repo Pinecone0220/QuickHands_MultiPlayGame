@@ -18,6 +18,6 @@ namespace HelloWorld
         }
         public static int IndexOf(PartyMiniGame game)=>Array.IndexOf(games,game);
         public static bool IsValid(PartyMiniGame game)=>System.Array.IndexOf(games,game)>=0;
-        public static string Name(PartyMiniGame game)=>game==PartyMiniGame.Countdown?"초읽기":game==PartyMiniGame.QuickHands?"퀵핸즈":game==PartyMiniGame.Signal?"신호등":game==PartyMiniGame.Greed?"욕심의 대가":game==PartyMiniGame.Memory?"뭐였더라?":"";
+        public static string Name(PartyMiniGame game)=>game==PartyMiniGame.Countdown?"초읽기":game==PartyMiniGame.QuickHands?"대난투":game==PartyMiniGame.Signal?"신호등":game==PartyMiniGame.Greed?"욕심의 대가":game==PartyMiniGame.Memory?"뭐였더라?":"";
     }
 }

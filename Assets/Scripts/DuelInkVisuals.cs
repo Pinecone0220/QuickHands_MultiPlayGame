@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 namespace HelloWorld
 {
@@ -6,10 +6,13 @@ namespace HelloWorld
     public sealed class DuelInkVisuals:MonoBehaviour
     {
         private RouletteTable table;private Transform root;
-        private readonly Transform[] held=new Transform[6],flight=new Transform[6],coats=new Transform[6],hands=new Transform[6];
+        private readonly Transform[] held=new Transform[6],flight=new Transform[6],coats=new Transform[6];
         private readonly Transform[,] drops=new Transform[6,8];
         private readonly Material[] coatMaterials=new Material[6],dropMaterials=new Material[6];
         private readonly List<Material> materials=new List<Material>();
+        private readonly List<Mesh> stainMeshes=new List<Mesh>();
+        private readonly DuelInkFade[] coatFades=new DuelInkFade[6];
+        private Texture2D stainTexture;
         private Material fabric,seam;
         private static Vector3 V(AimVector v)=>new Vector3(v.X,v.Y,v.Z);
         private Material Mat(string name,Color color,bool transparent=false)
@@ -33,15 +36,20 @@ namespace HelloWorld
         private void Start()
         {
             table=GetComponent<RouletteTable>();root=new GameObject("Ink pouches and splashes - presentation").transform;root.SetParent(transform,false);
+            stainTexture=DuelInkFace.Texture();
             fabric=Mat("Ink pouch fabric",new Color(.22f,.10f,.31f));seam=Mat("Ink pouch cord",new Color(.63f,.48f,.25f));
             for(int seat=0;seat<6;seat++)
             {
-                held[seat]=Pouch("Held ink pouch "+seat);flight[seat]=Pouch("Flying ink pouch "+seat);hands[seat]=table.CreateInkViewHand(root,seat);
+                held[seat]=Pouch("Held ink pouch "+seat);flight[seat]=Pouch("Flying ink pouch "+seat);
                 coats[seat]=new GameObject("Ink stains "+seat).transform;coats[seat].SetParent(table.InkHead(seat),false);coatMaterials[seat]=Mat("Ink stain "+seat,new Color(.025f,.008f,.05f,1),true);dropMaterials[seat]=Mat("Ink burst "+seat,new Color(.035f,.012f,.06f,1),true);
-                Block("Central face ink",coats[seat],new Vector3(0,-.015f,-.164f),new Vector3(.16f,.17f,.025f),coatMaterials[seat]).localRotation=Quaternion.Euler(0,0,8);
+                var skin=table.InkHead(seat).Find("Head").GetComponent<MeshFilter>();
+                var stain=DuelInkFace.Surface(skin.sharedMesh);stainMeshes.Add(stain);
+                var face=new GameObject("Face ink surface",typeof(MeshFilter),typeof(MeshRenderer));face.transform.SetParent(coats[seat],false);
+                face.transform.localPosition=skin.transform.localPosition;face.transform.localRotation=skin.transform.localRotation;face.transform.localScale=skin.transform.localScale;
+                face.GetComponent<MeshFilter>().sharedMesh=stain;face.GetComponent<MeshRenderer>().sharedMaterial=coatMaterials[seat];
+                coatMaterials[seat].SetTexture("_BaseMap",stainTexture);
                 for(int i=0;i<8;i++)
                 {
-                    float angle=i*Mathf.PI*2/8;var blob=Block("Face ink",coats[seat],new Vector3(Mathf.Cos(angle)*.09f,Mathf.Sin(angle)*.11f,-.164f),new Vector3(.10f,.09f,.025f),coatMaterials[seat]);blob.localRotation=Quaternion.Euler(0,0,i*47);
                     drops[seat,i]=Block("Burst droplet",root,Vector3.zero,Vector3.one*.045f,dropMaterials[seat]);
                 }
             }
@@ -49,21 +57,22 @@ namespace HelloWorld
         private void LateUpdate()
         {
             if(root==null)return;var p=HelloWorldPlayer.Local;bool valid=p!=null&&p.IsSpawned&&p.Seat.Value>=0;
-            var state=valid?p.State.Value:default;double now=valid?p.NetworkManager.ServerTime.Time:0;var fps=GetComponent<DuelFirstPerson>();
+            var state=valid?p.State.Value:default;double now=valid?p.NetworkManager.ServerTime.Time:0;var fps=GetComponent<DuelFirstPerson>();var spectator=GetComponent<DuelSpectator>();
             for(int seat=0;seat<6;seat++)
             {
                 var a=state.ForSeat(seat);var ink=a.Ink;double age=now-ink.ThrownAt;
                 bool showing=valid&&state.Phase==DuelPhase.Playing&&state.Alive(seat)&&state.Stage==DuelStage.Racing&&(DuelInk.Usable(state.Clock.Phase)||state.Clock.Phase==ClockPhase.QuickCountdown);
                 bool local=valid&&seat==p.Seat.Value;bool holding=showing&&(ink.Armed||ink.ThrownAt>=0&&age>=0&&age<DuelInk.ReleaseDelay);
-                held[seat].gameObject.SetActive(holding);hands[seat].gameObject.SetActive(local&&showing&&DuelInk.Busy(ink,now));
+                held[seat].gameObject.SetActive(holding);
                 float yaw=local?fps.Yaw:a.AimYaw,pitch=local?fps.Pitch:a.AimPitch;
-                Vector3 hand=local?RouletteTable.InkHandPoint(seat,yaw,pitch,ink.ThrownAt>=0?(float)age:-1):table.InkHand(seat).position;
+                Vector3 hand=table.InkHand(seat).position;
                 var facing=Quaternion.Euler(-pitch,yaw,0);held[seat].position=hand+facing*new Vector3(0,.07f,.035f);held[seat].rotation=facing*Quaternion.Euler(-8,0,-12);
-                hands[seat].position=hand;hands[seat].rotation=facing*Quaternion.Euler(0,85,0);
                 bool flying=showing&&ink.ThrownAt>=0&&age>=DuelInk.ReleaseDelay&&age<DuelInk.ReleaseDelay+DuelInk.Lifetime&&ink.ImpactAt<ink.ThrownAt;
                 flight[seat].gameObject.SetActive(flying);if(flying){flight[seat].position=V(DuelInk.Position(ink,now));flight[seat].rotation=Quaternion.Euler((float)age*340,(float)age*140,seat*37);}
-                float coat=valid&&state.Phase==DuelPhase.Playing&&state.Alive(seat)&&ink.InkedAt>=0?DuelInk.Opacity(now-ink.InkedAt):0;
-                coats[seat].gameObject.SetActive(coat>0&&!local);coatMaterials[seat].SetColor("_BaseColor",new Color(.025f,.008f,.05f,coat));
+                float coat=0;
+                if(valid&&state.Alive(seat))coat=coatFades[seat].Observe(ink,now,state.Phase,state.Clock.Phase,state.Clock.PhaseAt,state.StageStartedAt);
+                else coatFades[seat]=default;
+                coats[seat].gameObject.SetActive(coat>0&&!local&&!(spectator!=null&&spectator.Watching&&spectator.TargetSeat==seat));coatMaterials[seat].SetColor("_BaseColor",new Color(.025f,.008f,.05f,coat));
                 float impact=ink.ImpactAt>=0?(float)(now-ink.ImpactAt):10;bool bursting=valid&&impact>=0&&impact<.45f;
                 for(int i=0;i<8;i++)
                 {
@@ -73,6 +82,11 @@ namespace HelloWorld
                 dropMaterials[seat].SetColor("_BaseColor",new Color(.035f,.012f,.06f,Mathf.Clamp01(1-impact/.45f)));
             }
         }
-        private void OnDestroy(){if(root!=null)Destroy(root.gameObject);foreach(var m in materials)if(m!=null)Destroy(m);}
+        private void OnDestroy()
+        {
+            if(root!=null)Destroy(root.gameObject);foreach(var coat in coats)if(coat!=null)Destroy(coat.gameObject);
+            foreach(var m in materials)if(m!=null)Destroy(m);foreach(var mesh in stainMeshes)if(mesh!=null)Destroy(mesh);
+            if(stainTexture!=null)Destroy(stainTexture);
+        }
     }
 }

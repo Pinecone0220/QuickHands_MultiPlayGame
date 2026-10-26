@@ -9,7 +9,7 @@ namespace HelloWorld
 {
     [Serializable] public sealed class DuelLanRoom
     {
-        public string nonce,id,title;
+        public string nonce,id,title,code;
         public int port,count,max,protocol;
         public bool locked,joinable;
         [NonSerialized] public string address;
@@ -18,7 +18,7 @@ namespace HelloWorld
     // Discovery only. The advertised IP is never trusted; use the UDP response's source address.
     public sealed class DuelLanRooms:IDisposable
     {
-        public const int Protocol=52,FirstPort=47770,PortCount=16;
+        public const int Protocol=55,FirstPort=47770,PortCount=16;
         private const string Query="QUICKHANDS_QUERY_48:",Reply="QUICKHANDS_ROOM_48:";
         private UdpClient host,browser;
         private string nonce;
@@ -89,10 +89,11 @@ namespace HelloWorld
                 string json=new UTF8Encoding(false,true).GetString(data);if(!json.StartsWith(Reply,StringComparison.Ordinal))continue;
                 var room=JsonUtility.FromJson<DuelLanRoom>(json.Substring(Reply.Length));
                 if(room==null||room.nonce!=nonce||room.protocol!=Protocol||!HexId(room.id)||room.title==null||room.title.Length>40||room.port<1||room.port>65535||room.max!=6||room.count<1||room.count>6)continue;
+                if(!DuelRoomCode.TryNormalize(room.code,out var code)||code!=room.code)continue;
                 room.address=source.Address.ToString();room.seenAt=now;
                 string key=room.id;
                 if(!rooms.ContainsKey(key)&&rooms.Count>=64)continue;
-                if(!rooms.TryGetValue(key,out var old)||old.title!=room.title||old.count!=room.count||old.port!=room.port||old.joinable!=room.joinable||old.locked!=room.locked)Revision++;
+                if(!rooms.TryGetValue(key,out var old)||old.code!=room.code||old.title!=room.title||old.count!=room.count||old.port!=room.port||old.address!=room.address||old.joinable!=room.joinable||old.locked!=room.locked)Revision++;
                 rooms[key]=room;
             }catch(Exception e)when(e is SocketException||e is ArgumentException||e is DecoderFallbackException){ }
             var expired=new List<string>();foreach(var pair in rooms)if(now-pair.Value.seenAt>6)expired.Add(pair.Key);

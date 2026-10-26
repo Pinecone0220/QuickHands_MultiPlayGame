@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 namespace HelloWorld
 {
     public sealed partial class DuelDirector
@@ -57,15 +57,16 @@ namespace HelloWorld
         }
         private bool TickInkAi(double now)
         {
-            if(Game.Mode!=DuelMode.AI||!DuelInk.Shooting(clock.State.Phase))return false;
+            if(BotMask==0||!DuelInk.Shooting(clock.State.Phase))return false;
             bool changed=false;
             for(int bot=1;bot<actions.Length;bot++)
             {
-                var a=actions[bot];if(!a.Ink.Owned||!CanUseInk(bot,now)||now-a.StartedAt<.35||QuickHandsActive&&(!a.QuickEquipped||a.QuickItem!=3))continue;
+                var a=actions[bot];if(!IsBot(bot)||!a.Ink.Owned||aiInkUsedIteration[bot]==clock.State.Iteration||!CanUseInk(bot,now)||now-a.StartedAt<.35||QuickHandsActive&&(!a.QuickEquipped||a.QuickItem!=3))continue;
                 if(!a.Ink.Armed){changed|=UseInk(bot,clock.State.Iteration,now);continue;}
                 int target=RandomTarget(bot);if(target<0)continue;
-                DuelGunplay.Angles(DuelGunplay.Point(target,DuelHitPart.Body)-DuelGunplay.Eye(bot),out float yaw,out float pitch);
-                changed|=ThrowInk(bot,yaw,pitch,clock.State.Iteration,a.Life,actions[bot].Ink.Version,now,now);
+                AimAiInk(bot,target,out float yaw,out float pitch);
+                if(ThrowInk(bot,yaw,pitch,clock.State.Iteration,a.Life,actions[bot].Ink.Version,now,now))
+                {aiInkUsedIteration[bot]=clock.State.Iteration;if(QuickHandsActive)aiQuickUsedIteration[bot]=clock.State.Iteration;changed=true;}
             }
             return changed;
         }

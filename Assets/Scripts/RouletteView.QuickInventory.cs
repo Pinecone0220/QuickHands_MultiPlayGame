@@ -1,4 +1,4 @@
-using UnityEngine.UIElements;
+﻿using UnityEngine.UIElements;
 namespace HelloWorld
 {
     public sealed partial class RouletteView
@@ -14,7 +14,7 @@ namespace HelloWorld
         private HoverInfo LocalEquipmentHover()
         {
             var p=HelloWorldPlayer.Local;if(p==null||!p.IsSpawned||p.Seat.Value<0)return default;
-            var a=p.State.Value.ForSeat(p.Seat.Value);return a.QuickEquipped?ItemHoverInfo((DuelItem)(a.QuickItem-1)):WeaponHoverInfo(a.SelectedWeapon);
+            var a=p.State.Value.ForSeat(spectator!=null&&spectator.Watching?spectator.TargetSeat:p.Seat.Value);return a.QuickEquipped?ItemHoverInfo((DuelItem)(a.QuickItem-1)):WeaponHoverInfo(a.SelectedWeapon);
         }
     }
 }

@@ -1,0 +1,14 @@
+MUSIC CREDIT
+
+Local Forecast - Elevator
+Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 3.0 License
+https://creativecommons.org/licenses/by/3.0/
+
+Track information:
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300012
+Original MP3:
+https://incompetech.com/music/royalty-free/mp3-royaltyfree/Local%20Forecast%20-%20Elevator.mp3
+
+The source MP3 is unmodified. Unity transcodes it for streaming playback;
+the game adjusts playback volume and repeats the recording.

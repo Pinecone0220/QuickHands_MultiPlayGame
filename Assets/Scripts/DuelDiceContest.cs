@@ -68,6 +68,7 @@ namespace HelloWorld
                 groups.RemoveAll(group=>group.Count==0);
                 int tiedMask=0;foreach(var group in groups)if(group.Count>1)foreach(int seat in group)tiedMask|=1<<seat;
                 var s=State;s.ParticipantsMask&=connected;s.PendingMask&=connected&tiedMask;s.LockedMask&=s.PendingMask;State=s;changed=true;
+                if(firstPlaceOnly&&(groups.Count==0||groups[0].Count==1)){Complete();return true;}
                 if(s.Phase==DuelDicePhase.Rolling&&(s.PendingMask&~s.LockedMask)==0)Compare(now);
             }
             if(State.Phase==DuelDicePhase.Rolling&&now>=State.EndsAt)

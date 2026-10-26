@@ -1,4 +1,4 @@
-namespace HelloWorld
+﻿namespace HelloWorld
 {
     public sealed partial class DuelDirector
     {
@@ -50,7 +50,7 @@ namespace HelloWorld
         }
         private void FinishQuickItem(int seat)
         {
-            HolsterQuickItem(seat);var a=actions[seat];if(a.QuickItem<2||a.QuickSpent)return;
+            HolsterQuickItem(seat);var a=actions[seat];if(!IsBot(seat)||a.QuickItem<2||a.QuickSpent)return;
             if(!Game.UnlimitedItems)
             {
                 if(a.QuickItem==2)a.TaserReadyIteration=System.Math.Max(a.TaserReadyIteration,clock.State.Iteration+3);
@@ -65,15 +65,15 @@ namespace HelloWorld
         {foreach(var a in actions)if(a.QuickEquipped||a.QuickItem>=2&&!a.QuickSpent)return true;return false;}
         private bool TickQuickItemAi(double now)
         {
-            if(Game.Mode!=DuelMode.AI||!QuickHandsActive)return false;bool changed=false;
+            if(BotMask==0||!QuickHandsActive)return false;bool changed=false;
             for(int seat=1;seat<actions.Length;seat++)
             {
-                var a=actions[seat];if(a.QuickItem<2||!RouletteRules.Has(Game.AliveMask,seat)||a.Stunned)continue;
-                if(a.QuickSpent||a.QuickEquipped&&a.QuickItem==2&&a.Ammo==0){if(a.QuickEquipped){HolsterQuickItem(seat);Sequence++;changed=true;}continue;}
+                var a=actions[seat];if(!IsBot(seat)||a.QuickItem<2||!RouletteRules.Has(Game.AliveMask,seat)||a.Stunned)continue;
+                if(a.QuickSpent||aiQuickUsedIteration[seat]==clock.State.Iteration||a.QuickEquipped&&a.QuickItem==2&&a.Ammo==0){if(a.QuickEquipped){HolsterQuickItem(seat);Sequence++;changed=true;}continue;}
                 if(!a.QuickEquipped){changed|=SwitchQuickItem(seat,true,clock.State.Iteration,a.Life,a.QuickItemVersion,now);continue;}
                 if(a.QuickItem!=2||now-a.StartedAt<.5)continue;int target=RandomTarget(seat);if(target<0)continue;
-                DuelGunplay.Angles(DuelGunplay.Point(target,DuelHitPart.Body)-DuelGunplay.Eye(seat),out float yaw,out float pitch);
-                changed|=Fire(seat,yaw,pitch,false,a.Version,now,now);
+                AimAiWeapon(seat,target,now,out float yaw,out float pitch);
+                if(Fire(seat,yaw,pitch,false,a.Version,now,now)){aiQuickUsedIteration[seat]=clock.State.Iteration;changed=true;}
             }
             return changed;
         }

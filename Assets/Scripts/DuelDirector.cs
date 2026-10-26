@@ -22,10 +22,15 @@ namespace HelloWorld
         public int LivesRemaining;
         public double ReviveAt;
         public bool HasRecovery,HasTaser,TaserArmed,Stunned;
+        public int BulletItems;
+        public bool BulletUsed;
+        public bool HasNoruFace,NoruFaceActive;
+        public int NoruFaceReadyIteration;
         public int TaserReadyIteration;
         public int QuickItem,QuickItemVersion;
         public bool QuickEquipped,QuickSpent;
         public double HealAt,StunnedAt;
+        public bool IsStunned(double now)=>Stunned&&StunnedAt>=0&&now-StunnedAt<DuelDirector.TaserStunDuration;
         public DuelInkState Ink;
         public int LoadedMask,SpentMask,NextChamber;
         public int FiredBottleMask,FiredGlassMask;
@@ -58,14 +63,18 @@ namespace HelloWorld
             Kills == o.Kills && CorrectInputs == o.CorrectInputs && CurrentStreak == o.CurrentStreak && BestStreak == o.BestStreak &&
             DamageDealt == o.DamageDealt && ShotsFired == o.ShotsFired && PracticeShotsFired==o.PracticeShotsFired && PracticeSession==o.PracticeSession && BestMultiKill == o.BestMultiKill &&
             AimYaw == o.AimYaw && AimPitch == o.AimPitch && Aiming == o.Aiming && AimStartedAt == o.AimStartedAt && ShootingStartedAt==o.ShootingStartedAt && LastHitPart == o.LastHitPart &&
-            ClockWins == o.ClockWins && ClockStops == o.ClockStops && ClockErrorTotal == o.ClockErrorTotal && DeathCause==o.DeathCause && SelectedWeapon==o.SelectedWeapon && SelectedItems==o.SelectedItems && LoadoutLocked==o.LoadoutLocked && Life==o.Life && LivesRemaining==o.LivesRemaining && ReviveAt==o.ReviveAt && HasRecovery==o.HasRecovery && HasTaser==o.HasTaser && TaserArmed==o.TaserArmed && Stunned==o.Stunned && TaserReadyIteration==o.TaserReadyIteration && HealAt==o.HealAt && StunnedAt==o.StunnedAt && Ink.Equals(o.Ink)&&QuickItem==o.QuickItem&&QuickItemVersion==o.QuickItemVersion&&QuickEquipped==o.QuickEquipped&&QuickSpent==o.QuickSpent;
+            ClockWins == o.ClockWins && ClockStops == o.ClockStops && ClockErrorTotal == o.ClockErrorTotal && DeathCause==o.DeathCause && SelectedWeapon==o.SelectedWeapon && SelectedItems==o.SelectedItems && LoadoutLocked==o.LoadoutLocked && Life==o.Life && LivesRemaining==o.LivesRemaining && ReviveAt==o.ReviveAt && HasRecovery==o.HasRecovery && HasTaser==o.HasTaser && TaserArmed==o.TaserArmed && Stunned==o.Stunned && TaserReadyIteration==o.TaserReadyIteration && HealAt==o.HealAt && StunnedAt==o.StunnedAt && Ink.Equals(o.Ink)&&QuickItem==o.QuickItem&&QuickItemVersion==o.QuickItemVersion&&QuickEquipped==o.QuickEquipped&&QuickSpent==o.QuickSpent&&BulletItems==o.BulletItems&&BulletUsed==o.BulletUsed&&HasNoruFace==o.HasNoruFace&&NoruFaceActive==o.NoruFaceActive&&NoruFaceReadyIteration==o.NoruFaceReadyIteration;
     }
     public sealed partial class DuelDirector
     {
         public const double CountdownDuration = 2.5, AfterShotDuration = 1.65, MistakePenalty = 0.45;
         public const double RecoveryDuration=1.3;
+        public const double TaserStunDuration=2;
         public RouletteRules Game { get; }
         public AiDifficulty Difficulty { get; }
+        public int BotMask {get;private set;}
+        public bool IsBot(int seat)=>RouletteRules.Has(BotMask&Game.ConnectedMask,seat);
+        public bool AddBot(int seat,double now)=>seat>0&&seat<RouletteRules.MaxPlayers&&Join(seat,now,true);
         private readonly DuelClockContest clock;
         private readonly DuelTabletop tabletop=new DuelTabletop();
         public DuelTabletopState Tabletop=>tabletop.State;
@@ -123,21 +132,22 @@ namespace HelloWorld
             for (int i = 0; i < state.Length; i++) state.Code = state.Code * 10 + random.Next(1, 6);
             state.StartedAt = now; state.BlockedUntil = now; actions[seat] = state;
         }
-        public bool Join(int seat, double now)
+        public bool Join(int seat, double now, bool bot=false)
         {
-            int previousPractice=PracticeMask;
             if (Stage != DuelStage.Idle || !Game.Join(seat)) return false;
-            ResetPracticeReadiness(previousPractice,now);
+            if(bot||Game.Mode==DuelMode.AI&&seat>0)BotMask|=1<<seat;else BotMask&=~(1<<seat);
+            InvalidatePracticeFlights();
             int practiceSession=actions[seat].PracticeSession+1;
             actions[seat] = new DuelActionState { Weapon = DuelWeapon.Revolver,LivesRemaining=RouletteRules.StartingLives,ReviveAt=-1,PracticeSession=practiceSession,Ink=DuelInkState.Empty };
             tabletop.Joined(seat,now);
             selectedWeapons[seat]=DuelWeapon.Revolver;
-            selectedItems[seat]=Game.AutoSelectItems?DuelLoadout.All:Game.Mode==DuelMode.AI&&seat>0?DuelLoadout.AiSelection(seat):0;
+            selectedItems[seat]=Game.AutoSelectItems?DuelLoadout.All:IsBot(seat)?DuelLoadout.AiSelection(seat):0;
+            ConfigureBotLoadout(seat,Game.Round+1);
             actions[seat].AimYaw = seat * 60;
             actions[seat].DiedAt = actions[seat].FiredAt = actions[seat].HitAt = -1; actions[seat].FiredTarget = -1;
             ResetAction(seat, DuelAction.Pickup, now); Sequence++;
-            if (Game.Mode == DuelMode.AI)
-                for (int bot = 1; bot < RouletteRules.MaxPlayers; bot++) if (RouletteRules.Has(Game.ConnectedMask, bot)) Game.SetReady(bot);
+            for (int ai = 1; ai < RouletteRules.MaxPlayers; ai++) if (IsBot(ai)) Game.SetReady(ai);
+            TryStart(now);
             return true;
         }
         public bool Ready(int seat, double now)
@@ -180,6 +190,7 @@ namespace HelloWorld
             for(int seat=0;seat<RouletteRules.MaxPlayers;seat++)
                 if(RouletteRules.Has(Game.ConnectedMask,seat)&&!DuelLoadout.Complete(selectedItems[seat]))return;
             if (!Game.Start()) return;
+            for(int bot=1;bot<actions.Length;bot++)if(RouletteRules.Has(Game.ConnectedMask,bot))ConfigureBotLoadout(bot,Game.Round);
             practiceProjectiles.Clear();
             tabletop.Reset(now);
             Array.Clear(projectiles,0,projectiles.Length);
@@ -198,6 +209,10 @@ namespace HelloWorld
                 actions[seat].ClockWins = actions[seat].ClockStops = actions[seat].ClockErrorTotal = 0;
                 actions[seat].HasRecovery=RouletteRules.Has(Game.ConnectedMask,seat)&&DuelLoadout.Has(selectedItems[seat],DuelItem.Recovery);
                 actions[seat].HasTaser=RouletteRules.Has(Game.ConnectedMask,seat)&&DuelLoadout.Has(selectedItems[seat],DuelItem.Taser);
+                actions[seat].BulletItems=RouletteRules.Has(Game.ConnectedMask,seat)&&DuelLoadout.Has(selectedItems[seat],DuelItem.Bullet)?2:0;
+                actions[seat].BulletUsed=false;
+                actions[seat].HasNoruFace=RouletteRules.Has(Game.ConnectedMask,seat)&&DuelLoadout.Has(selectedItems[seat],DuelItem.NoruFace);
+                actions[seat].NoruFaceActive=false;actions[seat].NoruFaceReadyIteration=0;
                 actions[seat].Ink=DuelInkState.Empty;actions[seat].Ink.Owned=RouletteRules.Has(Game.ConnectedMask,seat)&&DuelLoadout.Has(selectedItems[seat],DuelItem.Ink);
                 actions[seat].LoadoutLocked=RouletteRules.Has(Game.ConnectedMask,seat);
                 actions[seat].TaserReadyIteration=0;actions[seat].TaserArmed=actions[seat].Stunned=false;actions[seat].HealAt=actions[seat].StunnedAt=-1;
@@ -226,6 +241,8 @@ namespace HelloWorld
         }
         public bool UseItem(int seat,DuelItem item,int iteration,double now)
         {
+            if(item==DuelItem.NoruFace)return UseNoruFace(seat,iteration,now);
+            if(item==DuelItem.Bullet)return UseBullet(seat,iteration,now);
             if(clock.State.MiniGame==PartyMiniGame.QuickHands)return SelectQuickItem(seat,item,iteration,now);
             if(item==DuelItem.Ink)return UseInk(seat,iteration,now);
             if(Stage!=DuelStage.Racing||Game.Phase!=DuelPhase.Playing||clock.State.Phase!=ClockPhase.ItemPreparation||now>=clock.State.StartedAt||iteration!=clock.State.Iteration||!RouletteRules.Has(Game.AliveMask,seat))return false;
@@ -238,17 +255,25 @@ namespace HelloWorld
             actions[seat]=a;Sequence++;return true;
         }
         private void ClearTurnEffects()
-        {ClearQuickItems();ClearInkTurn();for(int i=0;i<actions.Length;i++){actions[i].TaserArmed=actions[i].Stunned=false;actions[i].StunnedAt=-1;if(actions[i].Weapon==DuelWeapon.Taser){actions[i].Weapon=selectedWeapons[i];actions[i].LoadedMask=0;actions[i].Aiming=false;actions[i].Target=-1;actions[i].Version++;}}}
+        {ClearQuickItems();ClearInkTurn();for(int i=0;i<actions.Length;i++){actions[i].NoruFaceActive=false;actions[i].TaserArmed=actions[i].Stunned=false;actions[i].StunnedAt=-1;if(actions[i].Weapon==DuelWeapon.Taser){actions[i].Weapon=selectedWeapons[i];actions[i].LoadedMask=0;actions[i].Aiming=false;actions[i].Target=-1;actions[i].Version++;}}}
         private bool AnyProjectile(){foreach(var p in projectiles)if(p!=null)return true;return AnyInkFlight();}
         private bool TickShock(double now)
         {
-            if(!DuelInk.Shooting(clock.State.Phase)||Game.Phase!=DuelPhase.Playing)return false;
             bool changed=false;
+            bool shooting=DuelInk.Shooting(clock.State.Phase)&&Game.Phase==DuelPhase.Playing;
+            for(int i=0;i<actions.Length;i++)if(actions[i].Stunned&&
+                (!shooting||!RouletteRules.Has(Game.AliveMask,i)||!actions[i].IsStunned(now)))
+            {
+                actions[i].Stunned=false;actions[i].StunnedAt=-1;nextShockShot[i]=double.PositiveInfinity;
+                lastLook[i]=now-1;Sequence++;changed=true;
+            }
+            if(!shooting)return changed;
             for(int i=0;i<actions.Length;i++)if(actions[i].Stunned&&RouletteRules.Has(Game.AliveMask,i)&&now>=nextShockShot[i])
             {
                 nextShockShot[i]=now+.18+random.NextDouble()*.42;
-                var a=actions[i];a.AimYaw=(float)(random.NextDouble()*360);a.AimPitch=(float)(random.NextDouble()*70-35);a.Target=-1;a.Aiming=false;actions[i]=a;lastLook[i]=now;
-                if(a.Ammo>0&&random.NextDouble()<.55)changed|=Fire(i,a.AimYaw,a.AimPitch,false,a.Version,now,now,true);
+                bool armedShooter=QuickHandsActive||clock.State.First==i;
+                var a=actions[i];if(armedShooter){a.AimYaw=(float)(random.NextDouble()*360);a.AimPitch=(float)(random.NextDouble()*70-35);}a.Target=-1;a.Aiming=false;actions[i]=a;lastLook[i]=now;
+                if(armedShooter&&a.Ammo>0&&random.NextDouble()<.55)changed|=Fire(i,a.AimYaw,a.AimPitch,false,a.Version,now,now,true);
                 changed=true;Sequence++;
             }
             return changed;
@@ -301,7 +326,11 @@ namespace HelloWorld
         }
         public bool Look(int seat,float yaw,float pitch,bool ads,double now)
         {
-            if ((!IsPracticing(seat)&&(Stage != DuelStage.Racing || Game.Phase != DuelPhase.Playing || !RouletteRules.Has(Game.AliveMask,seat))) || actions[seat].Stunned || !DuelGunplay.ValidSeatAngles(seat,yaw,pitch)) return false;
+            if(!DuelGunplay.ValidSeatAngles(seat,yaw,pitch))return false;
+            bool lobby=Stage==DuelStage.Idle&&Game.Phase==DuelPhase.Waiting&&RouletteRules.Has(Game.ConnectedMask,seat);
+            bool countdown=Stage==DuelStage.Countdown&&Game.Phase==DuelPhase.Playing&&RouletteRules.Has(Game.AliveMask,seat);
+            if ((!lobby&&!countdown&&!IsPracticing(seat)&&(Stage != DuelStage.Racing || Game.Phase != DuelPhase.Playing || !RouletteRules.Has(Game.AliveMask,seat))) || actions[seat].IsStunned(now)) return false;
+            if(countdown||lobby&&!IsPracticing(seat))ads=false;
             ads&=WeaponRules.SupportsAds(actions[seat].Weapon);
             if (now-lastLook[seat] < (ads==actions[seat].Aiming ? 1.0/30 : .01)) return false;
             ApplyLook(seat,yaw,pitch,ads,now); return true;
@@ -333,7 +362,7 @@ namespace HelloWorld
             ads&=WeaponRules.SupportsAds(actions[seat].Weapon);
             if(IsPracticing(seat))return !involuntary&&FirePractice(seat,yaw,pitch,ads,version,shotTime,now);
             if (Stage != DuelStage.Racing || Game.Phase != DuelPhase.Playing || RouletteRules.Count(Game.AliveMask)<2 || !RouletteRules.Has(Game.AliveMask,seat) ||
-                (!QuickHandsActive && !CanClockShoot(seat,now)) || actions[seat].Stunned&&!involuntary ||
+                (!QuickHandsActive && !CanClockShoot(seat,now)) || actions[seat].IsStunned(now)&&!involuntary ||
                 (actions[seat].Action!=DuelAction.Aim && !(actions[seat].Weapon==DuelWeapon.Revolver&&(ads||actions[seat].SpentMask!=0))) || actions[seat].Ammo<=0 || projectiles[seat]!=null || actions[seat].Version != version || !(involuntary?DuelGunplay.ValidAngles(yaw,pitch):DuelGunplay.ValidSeatAngles(seat,yaw,pitch)) ||
                 double.IsNaN(shotTime) || double.IsInfinity(shotTime) || shotTime < now-.3 || shotTime > now+.05) return false;
             if(QuickHandsActive && Game.ShotTimeLimit>0 && actions[seat].ShootingStartedAt>=0 && now-actions[seat].ShootingStartedAt>=Game.ShotTimeLimit)return false;
@@ -364,6 +393,7 @@ namespace HelloWorld
             actions[seat].LoadedMask&=~(1<<firedChamber);actions[seat].SpentMask|=1<<firedChamber;
             actions[seat].NextChamber=(firedChamber+1)%WeaponRules.Capacity(a.Weapon);
             ResetAction(seat,WeaponRules.ReloadAction(a.Weapon),now);
+            if(!QuickHandsActive&&a.Weapon!=DuelWeapon.Taser)clockShotsRemaining--;
             actions[seat].ShootingStartedAt=actions[seat].Ammo>0?now:-1;
             if(quickTaser(seat)){actions[seat].QuickSpent=!Game.UnlimitedItems;actions[seat].QuickItemVersion++;actions[seat].TaserReadyIteration=Game.UnlimitedItems?0:clock.State.Iteration+3;actions[seat].Action=DuelAction.Aim;}
             aiTarget[seat]=-1;Retarget();Sequence++;
@@ -372,6 +402,8 @@ namespace HelloWorld
         private void ResolveProjectile(DuelProjectileVolley volley,DuelRayHit hit,double now)
         {
             int seat=volley.Actor;bool quick=QuickHandsActive;
+            if(volley.Weapon==DuelWeapon.Taser&&hit.Seat>=0&&actions[hit.Seat].NoruFaceActive)
+                hit=new DuelRayHit{Seat=-1,Part=DuelHitPart.None};
             if(!RouletteRules.Has(Game.AliveMask,hit.Seat))hit=new DuelRayHit{Seat=-1,Part=DuelHitPart.None};
             if (!Game.Shoot(seat,hit.Seat,volley.Weapon,hit.Part,true)) return;
             int kills = RouletteRules.Count(Game.LastKilledMask);
@@ -390,7 +422,12 @@ namespace HelloWorld
             {clock.RecordQuickDeaths(Game.LastKilledMask,RouletteRules.Count(Game.AliveMask));}
             if(volley.Weapon==DuelWeapon.Taser&&hit.Seat>=0&&RouletteRules.Has(Game.AliveMask,hit.Seat)&&DuelInk.Shooting(clock.State.Phase))
             {HolsterQuickItem(hit.Seat);actions[hit.Seat].Stunned=true;actions[hit.Seat].StunnedAt=now;actions[hit.Seat].Aiming=false;actions[hit.Seat].Target=-1;if(actions[hit.Seat].Ink.Armed){actions[hit.Seat].Ink.Armed=false;actions[hit.Seat].Ink.Version++;}nextShockShot[hit.Seat]=now+.12+random.NextDouble()*.18;}
-            if (!quick && volley.Weapon!=DuelWeapon.Taser)shotOpportunitySpent=true;
+            if (!quick && volley.Weapon!=DuelWeapon.Taser)
+            {
+                shotOpportunitySpent=clockShotsRemaining<=0;
+                if(!shotOpportunitySpent&&RouletteRules.Has(Game.AliveMask,seat)&&RouletteRules.Count(Game.AliveMask)>1)
+                    PrepareBonusShot(seat,now);
+            }
             Retarget();ShotConfirmed?.Invoke();
         }
         private bool TickProjectiles(double now)
@@ -454,8 +491,9 @@ namespace HelloWorld
             }
             if(Stage==DuelStage.Racing && Game.Phase==DuelPhase.Playing)
                 changed |= TickClock(now);
-            for (int bot = 1; bot < RouletteRules.MaxPlayers && Game.Mode == DuelMode.AI; bot++)
+            for (int bot = 1; bot < RouletteRules.MaxPlayers; bot++)
             {
+                if(!IsBot(bot))continue;
                 if (Stage == DuelStage.Idle && RouletteRules.Has(Game.ConnectedMask, bot) && !RouletteRules.Has(Game.ReadyMask, bot))
                     changed |= Ready(bot, now);
                 if(!QuickHandsActive||actions[bot].QuickEquipped) continue;
@@ -466,15 +504,18 @@ namespace HelloWorld
                     {
                         aiTarget[bot] = RandomTarget(bot);
                         if (aiTarget[bot] < 0) continue;
-                        var part = random.NextDouble() < (Difficulty==AiDifficulty.Hard?.55:Difficulty==AiDifficulty.Normal?.3:.12) ? DuelHitPart.Head : DuelHitPart.Body;
-                        DuelGunplay.Angles(DuelGunplay.Point(aiTarget[bot],part)-DuelGunplay.Eye(bot),out float y,out float p);
-                        float error = Difficulty==AiDifficulty.Hard?.35f:Difficulty==AiDifficulty.Normal?1.25f:3f;
-                        changed |= Look(bot,y+(float)(random.NextDouble()*2-1)*error,p+(float)(random.NextDouble()*2-1)*error,true,now);
+                        AimAiWeapon(bot,aiTarget[bot],now,out float y,out float p);
+                        changed |= Look(bot,y,p,WeaponRules.SupportsAds(actions[bot].Weapon),now);
                         double aimDelay=Difficulty==AiDifficulty.Hard?.3:Difficulty==AiDifficulty.Normal?.55:.85;
                         if(Game.ShotTimeLimit>0)aimDelay=Math.Min(aimDelay,Math.Max(.02,(actions[bot].StartedAt+Game.ShotTimeLimit-now)*.5));
                         nextAi[bot] = now + aimDelay;
                     }
-                    else changed |= Fire(bot,actions[bot].AimYaw,actions[bot].AimPitch,true,actions[bot].Version,now,now);
+                    else
+                    {
+                        AimAiWeapon(bot,aiTarget[bot],now,out float y,out float p);
+                        changed |= Fire(bot,y,p,WeaponRules.SupportsAds(actions[bot].Weapon),actions[bot].Version,now,now);
+                        nextAi[bot]=now+AiInterval(random.NextDouble());
+                    }
                     continue;
                 }
                 var state = actions[bot]; int digit = state.Digit(state.Progress);
@@ -485,19 +526,19 @@ namespace HelloWorld
                     nextAi[bot]=Math.Min(nextAi[bot],now+Game.ShotTimeLimit*.25);
             }
             for (int seat=0;seat<RouletteRules.MaxPlayers;seat++)
-                if (actions[seat].Aiming && (Game.Mode==DuelMode.PvP || seat==0) && now-lastLook[seat]>.35)
+                if (actions[seat].Aiming && !IsBot(seat) && now-lastLook[seat]>.35)
                 { actions[seat].Aiming=false; actions[seat].Target=-1; Sequence++; changed=true; }
             return changed;
         }
         private void ScheduleAi(double now)
         {
-            if (Game.Mode != DuelMode.AI) return;
+            if (BotMask==0) return;
             for (int bot = 1; bot < RouletteRules.MaxPlayers; bot++)
-                if (RouletteRules.Has(Game.AliveMask, bot)) nextAi[bot] = now + AiInterval(random.NextDouble());
+                if (IsBot(bot)&&RouletteRules.Has(Game.AliveMask, bot)) nextAi[bot] = now + AiInterval(random.NextDouble());
         }
         private bool quickTaser(int seat)=>QuickHandsActive&&actions[seat].QuickEquipped&&actions[seat].QuickItem==2;
-        private bool HasTurnEffects(){foreach(var a in actions)if(a.TaserArmed||a.Stunned||a.Ink.Armed)return true;return AnyInkFlight()||HasQuickEffects();}
-        private bool CanClockShoot(int seat,double now) => !shotOpportunitySpent && clock.State.Phase==ClockPhase.Shooting && (clock.State.First==seat || actions[seat].TaserArmed&&actions[seat].Weapon==DuelWeapon.Taser) &&
+        private bool HasTurnEffects(){foreach(var a in actions)if(a.NoruFaceActive||a.TaserArmed||a.Stunned||a.Ink.Armed)return true;return AnyInkFlight()||HasQuickEffects();}
+        private bool CanClockShoot(int seat,double now) => !shotOpportunitySpent && clock.State.Phase==ClockPhase.Shooting && (clock.State.First==seat&&clockShotsRemaining>0 || actions[seat].TaserArmed&&actions[seat].Weapon==DuelWeapon.Taser) &&
             RouletteRules.Count(Game.AliveMask)>=2 && (Game.ShotTimeLimit==0 || now-clock.State.PhaseAt<Game.ShotTimeLimit);
         public bool StopClock(int seat,int iteration,double sample,double now)
         {
@@ -522,7 +563,7 @@ namespace HelloWorld
         }
         private void BeginPartySelection(double now)
         {
-            ClearTurnEffects();ResetQuickItems();shotOpportunitySpent=false;clock.Select(Game.AliveMask,now,Game.ManualMiniGame);
+            ClearTurnEffects();ResetQuickItems();ResetBulletTurn();shotOpportunitySpent=false;clock.Select(Game.AliveMask,now,Game.ManualMiniGame);
             for(int i=0;i<RouletteRules.MaxPlayers;i++)
             {
                 if(RouletteRules.Has(Game.AliveMask,i)){actions[i].Weapon=selectedWeapons[i];ResetAction(i,DuelAction.Pickup,now);lastLook[i]=now;aiTarget[i]=-1;}
@@ -562,6 +603,7 @@ namespace HelloWorld
             FinishQuickItem(seat);
             actions[seat].LivesRemaining=Math.Max(0,actions[seat].LivesRemaining-count);
             actions[seat].DiedAt=now;actions[seat].ReviveAt=-1;actions[seat].DeathCause=cause;
+            actions[seat].NoruFaceActive=false;
             actions[seat].Version++;actions[seat].Aiming=false;actions[seat].Target=-1;
             actions[seat].Ink.Armed=false;actions[seat].Ink.Version++;actions[seat].Ink.InkedAt=-1;
             if(actions[seat].LivesRemaining==0)PartyAliveMask&=~(1<<seat);
@@ -619,12 +661,12 @@ namespace HelloWorld
         private bool TickClock(double now,bool manualChosen=false)
         {
             bool changed=false;
-            if(Game.Mode==DuelMode.AI&&clock.State.Phase==ClockPhase.Dice)
+            if(clock.State.Phase==ClockPhase.Dice)
                 for(int bot=1;bot<RouletteRules.MaxPlayers;bot++)
-                    if(clock.State.Dice.CanStop(bot)&&now>=clock.State.Dice.StartedAt+.8+(bot*37+clock.State.Dice.Round*17)%43*.1)
+                    if(IsBot(bot)&&clock.State.Dice.CanStop(bot)&&now>=clock.State.Dice.StartedAt+.8+(bot*37+clock.State.Dice.Round*17)%43*.1)
                         changed|=StopDice(bot,clock.State.Iteration,clock.State.Dice.Round,now);
-            for(int bot=1;bot<RouletteRules.MaxPlayers&&Game.Mode==DuelMode.AI;bot++)
-                if(clock.State.Phase==ClockPhase.Memory&&clock.State.Memory.Phase==ArrowMemoryPhase.Input&&RouletteRules.Has(clock.State.Memory.ActiveMask&Game.AliveMask,bot)&&now>=nextAi[bot]&&!clock.State.Memory.ForSeat(bot).Locked)
+            for(int bot=1;bot<RouletteRules.MaxPlayers;bot++)
+                if(IsBot(bot)&&clock.State.Phase==ClockPhase.Memory&&clock.State.Memory.Phase==ArrowMemoryPhase.Input&&RouletteRules.Has(clock.State.Memory.ActiveMask&Game.AliveMask,bot)&&now>=nextAi[bot]&&!clock.State.Memory.ForSeat(bot).Locked)
                 {
                     var m=clock.State.Memory;int index=clock.MemoryProgress(bot),direction=clock.MemoryDirection(index);
                     double chance=Math.Min(.45,AiErrorChance+Math.Max(0,m.Length-3)*(Difficulty==AiDifficulty.Easy?.008:Difficulty==AiDifficulty.Normal?.004:.002));
@@ -632,7 +674,7 @@ namespace HelloWorld
                     changed|=InputMemory(bot,clock.State.Iteration,m.Round,index,direction,now);
                     nextAi[bot]=now+AiInterval(random.NextDouble());
                 }
-                else if(clock.State.Phase==ClockPhase.Counting&&RouletteRules.Has(Game.AliveMask,bot)&&now>=nextAi[bot])
+                else if(IsBot(bot)&&clock.State.Phase==ClockPhase.Counting&&RouletteRules.Has(Game.AliveMask,bot)&&now>=nextAi[bot])
                 { double sample=nextAi[bot];nextAi[bot]=double.PositiveInfinity;changed |= StopClock(bot,clock.State.Iteration,sample,sample); }
             var before=clock.State.Phase;
             var memoryBefore=clock.State.Memory.Phase;
@@ -653,6 +695,7 @@ namespace HelloWorld
                 if(before!=ClockPhase.Shooting && clock.State.Phase==ClockPhase.Shooting)
                 {
                     shotOpportunitySpent=false;
+                    clockShotsRemaining=1+(actions[clock.State.First].BulletUsed?1:0);
                     for(int i=0;i<actions.Length;i++)if(actions[i].TaserArmed&&RouletteRules.Has(Game.AliveMask,i))
                     {actions[i].Weapon=DuelWeapon.Taser;actions[i].Action=DuelAction.Aim;actions[i].LoadedMask=1;actions[i].SpentMask=0;actions[i].NextChamber=0;actions[i].Version++;actions[i].ShootingStartedAt=now;actions[i].Aiming=false;nextAi[i]=now+.4;}
                     int seat=clock.State.First;var a=actions[seat];a.Action=DuelAction.Aim;a.Progress=0;a.Version++;a.StartedAt=now;a.ShootingStartedAt=now;a.Aiming=false;a.LoadedMask=1;a.SpentMask=0;a.NextChamber=0;
@@ -666,23 +709,15 @@ namespace HelloWorld
                 }
             }
             var state=clock.State;
-            if(Game.Mode==DuelMode.AI&&state.Phase==ClockPhase.ItemPreparation&&now-state.PhaseAt>.75)
-                for(int bot=1;bot<actions.Length;bot++)if(RouletteRules.Has(Game.AliveMask,bot))
-                {if(Game.HealthForSeat(bot)<=50)changed|=UseItem(bot,DuelItem.Recovery,state.Iteration,now);
-                    if(state.MiniGame==PartyMiniGame.QuickHands){if(actions[bot].QuickItem==0){if(!UseItem(bot,DuelItem.Taser,state.Iteration,now))changed|=UseItem(bot,DuelItem.Ink,state.Iteration,now);else changed=true;}}
-                    else changed|=UseItem(bot,DuelItem.Taser,state.Iteration,now);}
-            if(Game.Mode==DuelMode.AI&&state.Phase==ClockPhase.Shooting)
-                for(int bot=1;bot<actions.Length;bot++)if(actions[bot].Weapon==DuelWeapon.Taser&&actions[bot].Ammo>0&&!actions[bot].Stunned&&!DuelInk.Busy(actions[bot].Ink,now)&&now>=nextAi[bot])
-                {int target=state.First;DuelGunplay.Angles(DuelGunplay.Point(target,DuelHitPart.Body)-DuelGunplay.Eye(bot),out float y,out float x);changed|=Fire(bot,y,x,false,actions[bot].Version,now,now);nextAi[bot]=double.PositiveInfinity;}
-            if(state.Phase==ClockPhase.Shooting&&Game.Mode==DuelMode.AI&&state.First>0&&!actions[state.First].Stunned&&!DuelInk.Busy(actions[state.First].Ink,now)&&now>=nextAi[state.First])
+            changed|=TickAiItemPreparation(now);
+            if(state.Phase==ClockPhase.Shooting)
+                for(int bot=1;bot<actions.Length;bot++)if(IsBot(bot)&&actions[bot].Weapon==DuelWeapon.Taser&&actions[bot].Ammo>0&&!actions[bot].Stunned&&!DuelInk.Busy(actions[bot].Ink,now)&&now>=nextAi[bot])
+                {int target=RandomTarget(bot);if(target<0)continue;AimAiWeapon(bot,target,now,out float y,out float x);bool fired=Fire(bot,y,x,false,actions[bot].Version,now,now);changed|=fired;nextAi[bot]=fired?double.PositiveInfinity:now+AiInterval(.5);}
+            if(state.Phase==ClockPhase.Shooting&&IsBot(state.First)&&!actions[state.First].Stunned&&!DuelInk.Busy(actions[state.First].Ink,now)&&now>=nextAi[state.First])
             {
                 int bot=state.First;
-                var part=random.NextDouble()<(Difficulty==AiDifficulty.Hard?.55:Difficulty==AiDifficulty.Normal?.3:.12)?DuelHitPart.Head:DuelHitPart.Body;
                 int target=RandomTarget(bot);
-                DuelGunplay.Angles(DuelGunplay.Point(target,part)-DuelGunplay.Eye(bot),out float yaw,out float pitch);
-                float error=Difficulty==AiDifficulty.Hard?.35f:Difficulty==AiDifficulty.Normal?1.25f:3f;
-                yaw+=(float)(random.NextDouble()*2-1)*error;pitch+=(float)(random.NextDouble()*2-1)*error;
-                changed |= Fire(bot,yaw,pitch,true,actions[bot].Version,now,now);nextAi[bot]=double.PositiveInfinity;
+                if(target>=0){AimAiWeapon(bot,target,now,out float yaw,out float pitch);bool fired=Fire(bot,yaw,pitch,WeaponRules.SupportsAds(actions[bot].Weapon),actions[bot].Version,now,now);changed|=fired;nextAi[bot]=fired?double.PositiveInfinity:now+AiInterval(.5);}
             }
             if(state.Phase==ClockPhase.Returning||state.Phase==ClockPhase.QuickResults||Game.Phase!=DuelPhase.Playing)ClearTurnEffects();
             changed|=ScheduleRecovery(now);
@@ -712,10 +747,10 @@ namespace HelloWorld
             if(!RouletteRules.Has(Game.ConnectedMask,seat))return false;
             FinishQuickItem(seat);
             bool playing=Game.Phase==DuelPhase.Playing;
-            int previousPractice=PracticeMask;
             PartyAliveMask&=~(1<<seat);
             if (!Game.Leave(seat)) return false;
-            ResetPracticeReadiness(previousPractice,now);
+            BotMask&=~(1<<seat);
+            InvalidatePracticeFlights();
             actions[seat].LivesRemaining=0;actions[seat].ReviveAt=-1;projectiles[seat]=null;
             inkFlights[seat]=null;actions[seat].Ink.Armed=false;actions[seat].Ink.Version++;
             practiceProjectiles.RemoveAll(v=>v.Actor==seat);
@@ -725,6 +760,7 @@ namespace HelloWorld
                 Game.ContinueParty();
                 if(!FinishPartyIfReady(now)&&QuickHandsActive&&RouletteRules.Count(Game.AliveMask)<=1)FinishQuick(now);
             }
+            else TryStart(now);
             return true;
         }
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -125,7 +125,7 @@ namespace HelloWorld
                 }
                 a.Previous=state;a.Active=active;
             }
-            bool contact=combat&&state.Stunned;
+            bool contact=combat&&state.IsStunned(now);
             if(contact&&!a.Contact.isPlaying)
             {a.Contact.clip=Clip("TaserContactLoop");a.Contact.loop=true;a.Contact.volume=.18f;a.Contact.Play();}
             else if(!contact&&a.Contact.isPlaying)a.Contact.Stop();

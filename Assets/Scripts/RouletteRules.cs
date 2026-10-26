@@ -54,7 +54,7 @@
         public bool Join(int seat)
         {
             if (seat < 0 || seat >= MaxPlayers || Phase == DuelPhase.Playing || Has(ConnectedMask, seat)) return false;
-            ConnectedMask |= 1 << seat; health[seat] = MaxHealth; ReadyMask = 0; return true;
+            ConnectedMask |= 1 << seat; health[seat] = MaxHealth; ReadyMask &= ~(1 << seat); return true;
         }
         public bool SetReady(int seat)
         {
@@ -134,7 +134,7 @@
         public bool Leave(int seat)
         {
             if (!Has(ConnectedMask, seat)) return false;
-            ConnectedMask &= ~(1 << seat); AliveMask &= ~(1 << seat); health[seat] = 0; ReadyMask = 0;
+            ConnectedMask &= ~(1 << seat); AliveMask &= ~(1 << seat); health[seat] = 0; ReadyMask &= ~(1 << seat);
             EvaluateWinner(); return true;
         }
     }

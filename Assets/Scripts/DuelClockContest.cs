@@ -122,13 +122,14 @@ namespace HelloWorld
             BeginDiceRanking(order,i=>s.ForSeat(i).Rank>0?s.ForSeat(i).Rank:int.MaxValue,now);
         }
         public bool HasQuickTies
-        {get{for(int a=0;a<RouletteRules.MaxPlayers;a++)if(RouletteRules.Has(State.ParticipantsMask,a)&&State.ForSeat(a).Rank>0)for(int b=a+1;b<RouletteRules.MaxPlayers;b++)if(RouletteRules.Has(State.ParticipantsMask,b)&&State.ForSeat(a).Rank==State.ForSeat(b).Rank)return true;return false;}}
+        {get{int best=int.MaxValue,count=0;for(int seat=0;seat<RouletteRules.MaxPlayers;seat++)if(RouletteRules.Has(State.ParticipantsMask,seat))
+            {int rank=State.ForSeat(seat).Rank;if(rank<=0)return false;if(rank<best){best=rank;count=1;}else if(rank==best)count++;}return count>1;}}
         void BeginDiceRanking(List<int> order,Func<int,int> key,double now)
         {
             order.Sort((a,b)=>key(a).CompareTo(key(b)));var groups=new List<List<int>>();
             for(int begin=0;begin<order.Count;)
             {int end=begin+1;while(end<order.Count&&key(order[end])==key(order[begin]))end++;groups.Add(order.GetRange(begin,end-begin));begin=end;}
-            if(dice.Begin(groups,now,State.MiniGame==PartyMiniGame.Greed)){var s=State;s.Phase=ClockPhase.Dice;s.PhaseAt=now;s.Dice=dice.State;State=s;}
+            if(dice.Begin(groups,now,true)){var s=State;s.Phase=ClockPhase.Dice;s.PhaseAt=now;s.Dice=dice.State;State=s;}
             else FinishDiceRanking(now);
         }
         void FinishDiceRanking(double now)
@@ -137,8 +138,7 @@ namespace HelloWorld
             for(int rank=0;rank<order.Count;rank++)
             {int seat=order[rank];var e=s.ForSeat(seat);var roll=dice.State.ForSeat(seat);e.Rank=rank+1;e.Dice=roll.Face;e.Rolls=roll.Rolls;s.Set(seat,e);}
             // Failed ties still earn a shooting opportunity; countdown timeouts never enter this order.
-            if(!quick)s.First=order.Count>0?order[0]:-1;
-            else if(!order.Contains(s.First))s.First=-1;
+            s.First=order.Count>0?order[0]:-1;
             s.Last=order.Count>1?order[order.Count-1]:-1;
             if(quick)s.EliminatedMask=s.Last>=0?1<<s.Last:0;
             s.Dice=dice.State;s.Phase=quick?ClockPhase.QuickResults:ClockPhase.Ranking;s.PhaseAt=now;State=s;

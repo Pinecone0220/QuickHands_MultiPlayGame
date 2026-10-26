@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UIElements;
 namespace HelloWorld
 {
@@ -6,18 +6,36 @@ namespace HelloWorld
     {
         private VisualElement inkOverlay;
         private Texture2D inkTexture;
+        private DuelInkFade inkFade;
+        private int inkViewSeat=-1;
+        private void UpdateInkLayering()
+        {
+            if(inkOverlay==null||root==null)return;
+            bool covering=inkOverlay.style.display.value!=DisplayStyle.None&&inkOverlay.style.opacity.value>0;
+            var player=HelloWorldPlayer.Local;
+            bool result=covering&&player!=null&&player.IsSpawned&&player.State.Value.Phase==DuelPhase.Playing&&
+                (player.State.Value.Clock.Phase==ClockPhase.Ranking||player.State.Value.Clock.Phase==ClockPhase.QuickResults||player.State.Value.Clock.Phase==ClockPhase.Returning);
+            // The clock panel normally belongs to the gameplay HUD; lift only its new result view.
+            var parent=result?root:table;
+            if(clockPanel.parent!=parent){clockPanel.RemoveFromHierarchy();parent.Add(clockPanel);}
+            if(!covering)return;
+            // Chat also raises itself in LateUpdate; its earlier execution order keeps this mask last.
+            inkOverlay.BringToFront();
+            if(result)clockPanel.BringToFront();
+            diceLayer?.BringToFront();resultsLayer.BringToFront();victoryLayer.BringToFront();highlightLayer.BringToFront();
+        }
         private void BuildInkOverlay()
         {
             inkOverlay=Box(root,"ink-effect");inkOverlay.pickingMode=PickingMode.Ignore;
             const int size=512;inkTexture=new Texture2D(size,size,TextureFormat.RGBA32,false){name="Ink pouch splash",wrapMode=TextureWrapMode.Clamp};
-            var pixels=new Color[size*size];var random=new System.Random(89);
-            var blobs=new Vector3[23];blobs[0]=new Vector3(252,255,82);blobs[1]=new Vector3(192,243,61);blobs[2]=new Vector3(315,260,68);blobs[3]=new Vector3(260,313,57);blobs[4]=new Vector3(229,190,49);
-            for(int i=5;i<blobs.Length;i++){float angle=(float)(random.NextDouble()*Mathf.PI*2),r=105+(float)random.NextDouble()*75;blobs[i]=new Vector3(256+Mathf.Cos(angle)*r,256+Mathf.Sin(angle)*r,4+(float)random.NextDouble()*12);}
+            var pixels=new Color[size*size];
             for(int y=0;y<size;y++)for(int x=0;x<size;x++)
             {
-                float alpha=0;
-                foreach(var b in blobs){float d=Vector2.Distance(new Vector2(x,y),new Vector2(b.x,b.y));float edge=b.z*(1+.06f*Mathf.Sin(x*.19f+y*.17f));alpha=Mathf.Max(alpha,Mathf.Clamp01((edge-d)/2));}
-                pixels[y*size+x]=new Color(.018f,.009f,.029f,alpha*.98f);
+                float nx=(x+.5f)/size*2-1,ny=(y+.5f)/size*2-1;
+                float radius=Mathf.Pow(Mathf.Pow(Mathf.Abs(nx)/1.11f,4)+Mathf.Pow(Mathf.Abs(ny)/1.11f,4),.25f);
+                float edge=1+.035f*Mathf.Sin(x*.09f+y*.06f)+.025f*Mathf.Cos(y*.10f-x*.02f);
+                float alpha=Mathf.Clamp01((edge-radius)*40);
+                pixels[y*size+x]=new Color(.018f,.009f,.029f,alpha*.995f);
             }
             inkTexture.SetPixels(pixels);inkTexture.Apply(false,true);inkOverlay.style.backgroundImage=new StyleBackground(inkTexture);
             inkOverlay.SendToBack();Show(inkOverlay,false);
@@ -26,11 +44,14 @@ namespace HelloWorld
         {
             if(inkOverlay==null)return;
             float opacity=0;
-            if(player!=null&&player.IsSpawned&&player.Seat.Value>=0&&player.State.Value.Phase==DuelPhase.Playing&&player.State.Value.Alive(player.Seat.Value))
+            int seat=player!=null&&player.IsSpawned?(spectator!=null&&spectator.Watching?spectator.TargetSeat:player.Seat.Value):-1;
+            if(inkViewSeat!=seat){inkViewSeat=seat;inkFade=default;}
+            if(player!=null&&player.IsSpawned&&seat>=0&&player.State.Value.Alive(seat))
             {
-                var ink=player.State.Value.ForSeat(player.Seat.Value).Ink;
-                if(ink.InkedAt>=0)opacity=DuelInk.Opacity(player.NetworkManager.ServerTime.Time-ink.InkedAt);
+                var s=player.State.Value;var ink=s.ForSeat(seat).Ink;
+                opacity=inkFade.Observe(ink,player.NetworkManager.ServerTime.Time,s.Phase,s.Clock.Phase,s.Clock.PhaseAt,s.StageStartedAt);
             }
+            else inkFade=default;
             inkOverlay.style.opacity=opacity;Show(inkOverlay,opacity>0);
         }
         private bool LiveInkTime(HelloWorldPlayer p)=>p!=null&&p.State.Value.Phase==DuelPhase.Playing&&p.State.Value.Alive(p.Seat.Value)&&p.State.Value.Clock.Phase==ClockPhase.Shooting;

@@ -234,7 +234,8 @@ public sealed class LoadoutRuntimeQA:MonoBehaviour
         Check(UnityEngine.Cursor.lockState==CursorLockMode.None,phase+" keeps selection cursor available");
         var puppets=Field<Array>(manager.Table,"puppets");var own=puppets.GetValue(seat);
         var renderers=(Renderer[])own.GetType().GetField("Renderers").GetValue(own);
-        Check(Array.TrueForAll(renderers,r=>r.forceRenderingOff),phase+" hides owner animation in first person");
+        var heads=(Renderer[])own.GetType().GetField("HeadRenderers").GetValue(own);
+        Check(Array.TrueForAll(renderers,r=>r.forceRenderingOff==(Array.IndexOf(heads,r)>=0)),phase+" shows owner body and hides only head in first person");
     }
     IEnumerator Capture(string name)
     {

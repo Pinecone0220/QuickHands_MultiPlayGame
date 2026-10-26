@@ -51,6 +51,8 @@ namespace HelloWorld
             s.SerializeValue(ref a.Life);
             s.SerializeValue(ref a.LivesRemaining);s.SerializeValue(ref a.ReviveAt);
             s.SerializeValue(ref a.HasRecovery);s.SerializeValue(ref a.HasTaser);s.SerializeValue(ref a.TaserArmed);s.SerializeValue(ref a.Stunned);s.SerializeValue(ref a.TaserReadyIteration);s.SerializeValue(ref a.HealAt);s.SerializeValue(ref a.StunnedAt);
+            s.SerializeValue(ref a.BulletItems);s.SerializeValue(ref a.BulletUsed);
+            s.SerializeValue(ref a.HasNoruFace);s.SerializeValue(ref a.NoruFaceActive);s.SerializeValue(ref a.NoruFaceReadyIteration);
             InkSerialize(s,ref a.Ink);
             s.SerializeValue(ref a.QuickItem);s.SerializeValue(ref a.QuickItemVersion);s.SerializeValue(ref a.QuickEquipped);s.SerializeValue(ref a.QuickSpent);
             s.SerializeValue(ref a.LoadedMask);s.SerializeValue(ref a.SpentMask);s.SerializeValue(ref a.NextChamber);

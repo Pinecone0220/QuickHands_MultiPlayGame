@@ -54,11 +54,12 @@ namespace HelloWorld
         private const float FallDuration = 0.95f;
         private const float DeathFaceHold = 1f;
         internal const float SpectatorLookDelay=FallDuration+DeathFaceHold+.4f;
+        internal static float SpectatorTransitionStart(int lives)=>lives==0?DuelLifeFeedback.PermanentRecoveryDuration:FallDuration+DeathFaceHold;
         private sealed class Puppet
         {
             public Transform Root, Body, Head, Torso, Upper, Forearm, Hand, LeftArm, LeftForearm, LeftHand;
             public Renderer[] HeadRenderers,Renderers;
-            public float BodyYaw, HeadYaw, HeadPitch;
+            public DuelHeadLook Look;
             public int Seat;
             public bool PoseInitialized,HandsInitialized;
             public DuelCharacterPose Pose;
@@ -71,6 +72,7 @@ namespace HelloWorld
             shotVisuals=gameObject.AddComponent<DuelShotVisuals>();
             weaponAudio=gameObject.AddComponent<DuelWeaponAudio>();
             gameObject.AddComponent<DuelInkVisuals>();
+            gameObject.AddComponent<DuelInkAudio>();
             foreach (var light in FindObjectsByType<Light>(FindObjectsSortMode.None)) light.enabled = false;
             var plane = GameObject.Find("Plane");
             if (plane != null) plane.SetActive(false);
@@ -375,6 +377,10 @@ namespace HelloWorld
             bool ready = player != null && player.IsSpawned && player.Seat.Value >= 0;
             var state = ready ? player.State.Value : default; int localSeat = ready ? player.Seat.Value : 0;
             double now = ready ? player.NetworkManager.ServerTime.Time : Time.timeAsDouble;
+            var spectator=GetComponent<DuelSpectator>();bool watching=ready&&spectator!=null&&spectator.Watching;
+            int viewSeat=watching?spectator.TargetSeat:localSeat;
+            bool viewActive=watching||firstPerson!=null&&firstPerson.Active;
+            bool viewAds=watching?spectator.Ads(state):firstPerson!=null&&firstPerson.Ads;
             drinkVisuals.Observe(ready?state.Tabletop:default,ready?state.Round:0,now,weaponAudio,ready);
             if(!ready){shotVisuals.Clear();weaponAudio.Clear();}
             double lastShotAt = -1;
@@ -394,6 +400,8 @@ namespace HelloWorld
                 bool occupied = !ready || state.Connected(seat);
                 chairs[seat].gameObject.SetActive(true);
                 puppet.Root.gameObject.SetActive(occupied);
+                ShowNoruFace(seat,ready&&occupied&&state.Alive(seat)&&action.NoruFaceActive&&
+                    (state.Clock.Phase==ClockPhase.ItemPreparation||state.Clock.Phase==ClockPhase.QuickCountdown||DuelInk.Shooting(state.Clock.Phase)));
                 gun.gameObject.SetActive(occupied && (!shared || seat==holder || action.TaserArmed&&state.Clock.Phase==ClockPhase.Shooting));
                 ShowHealing(seat,action,now,ready&&state.Clock.Phase==ClockPhase.ItemPreparation); loadingHand.gameObject.SetActive(false);
                 if (!occupied) { rigs[seat,3].EjectedCase.gameObject.SetActive(false);rigs[seat,3].BasSeen=false;muzzleLight.intensity = 0;weaponAudio.Observe(seat,state.Round,state.Clock.Iteration,action,now,false,false,false,Vector3.zero);continue; }
@@ -438,20 +446,20 @@ namespace HelloWorld
                     gun.position=Vec(origin)-facing*new Vector3(0,muzzleHeight,barrelLength*gun.localScale.z);
                     gun.rotation=facing*Quaternion.Euler(-recoil,0,0);
                 }
-                if (seat == localSeat && firstPerson != null && firstPerson.Active && (gunReady || shooter))
+                if (seat == viewSeat && viewActive && (gunReady || shooter))
                 {
-                    var eye = Vec(DuelGunplay.Eye(seat)); var facing = firstPerson.Rotation(now);
+                    var eye = Vec(DuelGunplay.Eye(seat)); var facing = watching?spectator.Rotation(state,now):firstPerson.Rotation(now);
                     float sightY = action.Weapon==DuelWeapon.SawedOff?(.075f+.15f*.6f+.0175f)*.78f:.155f*.64f;
                     // Keep the stock/hammer in front of the near plane. A close gun origin clips the sight picture.
                     float sightDistance = action.Weapon == DuelWeapon.SawedOff ? .90f : action.Weapon==DuelWeapon.Taser?.5f:.85f;
-                    Vector3 offset = firstPerson.Ads ? new Vector3(0,-sightY,sightDistance) : new Vector3(.28f,-.23f,.75f);
+                    Vector3 offset = viewAds ? new Vector3(0,-sightY,sightDistance) : new Vector3(.28f,-.23f,.75f);
                     gun.position = eye + facing * (offset + new Vector3(0,0,-recoil*.002f));
                     gun.rotation = facing * Quaternion.Euler(-recoil,0,0);
                 }
-                if(action.Weapon==DuelWeapon.BAS&&active&&!gunReady&&!shooter&&seat==localSeat&&firstPerson!=null&&firstPerson.Active)
+                if(action.Weapon==DuelWeapon.BAS&&active&&!gunReady&&!shooter&&seat==viewSeat&&viewActive)
                 {
                     // A long rifle needs a sideways inspection pose; a pistol pose puts the stock through the camera.
-                    var facing=Quaternion.Euler(-firstPerson.Pitch,firstPerson.Yaw,0);
+                    var facing=Quaternion.Euler(watching?-spectator.Pitch:-firstPerson.Pitch,watching?spectator.Yaw:firstPerson.Yaw,0);
                     gun.position=Vec(DuelGunplay.Eye(seat))+facing*new Vector3(.20f,-.28f,.80f);
                     gun.rotation=facing*Quaternion.Euler(5,-55,-15);
                 }
@@ -546,7 +554,7 @@ namespace HelloWorld
                 flash.SetActive(flashing); muzzleLight.intensity = flashing ? 8 : 0;
                 float hit = ready && action.HitAt >= 0 ? Mathf.Sin(Mathf.Clamp01((float)(now - action.HitAt) / 0.65f) * Mathf.PI) : 0;
                 float lookYaw=ready?action.AimYaw:seat*60, lookPitch=ready?action.AimPitch:0;
-                if(seat==localSeat && firstPerson!=null && firstPerson.Active)
+                if(seat==localSeat && firstPerson!=null && (firstPerson.Active||ready&&(state.Phase==DuelPhase.Waiting||state.Phase==DuelPhase.Playing&&state.Stage==DuelStage.Countdown&&state.Alive(seat))))
                 {lookYaw=firstPerson.Yaw;lookPitch=firstPerson.Pitch;}
                 var poseContext=new DuelPoseContext{Seat=seat,Time=now,Action=action.Action,Weapon=action.Weapon,Progress=progress,
                     Ink=inkPose,InkAge=action.Ink.ThrownAt>=0?(float)(now-action.Ink.ThrownAt):-1,
@@ -554,16 +562,16 @@ namespace HelloWorld
                     DrinkProgress=ready?Mathf.Clamp01((float)((now-state.Tabletop.ForSeat(seat).StartedAt)/DuelTabletop.Duration(state.Tabletop.ForSeat(seat).Action))):0,
                     Combat=practice||ready&&(state.Clock.Phase==ClockPhase.QuickHands||state.Clock.Phase==ClockPhase.Shooting),
                     ActionAge=Mathf.Max(0,(float)(now-action.StartedAt)),Active=active&&(practice||state.Clock.Phase==ClockPhase.QuickHands||state.Clock.Phase==ClockPhase.Shooting),GunReady=gunReady||shooter,Aiming=action.Aiming||manualAim||shooter&&action.FiredAds,
-                    Recoil=shooter?recoil/10:0,Stunned=ready&&action.Stunned,Attentive=ready&&state.Clock.Phase==ClockPhase.Counting,
+                    Recoil=shooter?recoil/10:0,Stunned=ready&&action.IsStunned(now),Attentive=ready&&state.Clock.Phase==ClockPhase.Counting,
                     Winner=ready&&!practice&&state.Phase==DuelPhase.Finished&&state.Winner==seat,
-                    ViewModel=seat==localSeat&&firstPerson!=null&&firstPerson.Active&&(gunReady||shooter),
+                    ViewModel=seat==viewSeat&&viewActive&&(gunReady||shooter),
                     Healing=ready&&state.Clock.Phase==ClockPhase.ItemPreparation&&action.HealAt>=0?Mathf.Clamp01(1-(float)(now-action.HealAt)/1.1f):0};
                 AnimatePuppetFrame(puppet, lift, hit, fall, lookYaw, lookPitch,recovery,poseContext);
                 ObserveBasCase(rigs[seat,3],action,state.Round,now,ready&&action.Weapon==DuelWeapon.BAS&&!dead);
-                if(action.Weapon==DuelWeapon.BAS&&seat==localSeat&&firstPerson!=null&&firstPerson.Active&&firstPerson.Ads)
+                if(action.Weapon==DuelWeapon.BAS&&seat==viewSeat&&viewActive&&viewAds)
                 {gun.gameObject.SetActive(false);loadingHand.gameObject.SetActive(false);}
-                ShowStun(seat,now,ready&&state.Alive(seat)&&action.Stunned&&DuelInk.Shooting(state.Clock.Phase)&&
-                    !(seat==localSeat&&firstPerson!=null&&firstPerson.Active));
+                ShowStun(seat,now,ready&&state.Alive(seat)&&action.IsStunned(now)&&DuelInk.Shooting(state.Clock.Phase)&&
+                    !(seat==viewSeat&&viewActive));
                 if(ready)shotVisuals.Observe(seat,state.Round,action,now,muzzle.position);
                 if(ready)weaponAudio.Observe(seat,state.Round,state.Clock.Iteration,action,now,true,poseContext.Active&&(practice||state.Phase==DuelPhase.Playing),poseContext.Combat&&(practice||state.Alive(seat)),
                     gun.gameObject.activeSelf?gun.position:puppet.Root.TransformPoint(new Vector3(0,1.4f,-.45f)));
@@ -577,8 +585,11 @@ namespace HelloWorld
             if (viewCamera != null)
             {
                 Quaternion around = SeatRotation(localSeat) * Quaternion.Euler(0, 180, 0);
-                bool finalView=ready&&!ownPractice&&state.Phase==DuelPhase.Finished;
-                bool fixedView=finalView||ready&&ownDeath&&state.ForSeat(localSeat).LivesRemaining==0&&now-state.ForSeat(localSeat).DiedAt>=SpectatorLookDelay;
+                var own=state.ForSeat(localSeat);
+                float spectatorStart=SpectatorTransitionStart(own.LivesRemaining);
+                bool restoringBeforeSpectating=ownDeath&&own.LivesRemaining==0&&now-own.DiedAt<spectatorStart+.4f;
+                bool finalView=ready&&!ownPractice&&state.Phase==DuelPhase.Finished&&!restoringBeforeSpectating;
+                bool fixedView=finalView||ready&&ownDeath&&own.LivesRemaining==0&&now-own.DiedAt>=spectatorStart+.4f;
                 float overview = ownDeath ? finalView?1:Smooth((float)(now - state.ForSeat(localSeat).DiedAt) / 0.8f) : 0;
                 Vector3 position = around * Vector3.Lerp(cameraHome, spectatorHome, overview);
                 Quaternion rotation = Quaternion.LookRotation(new Vector3(0, 1.05f, 0) - position);
@@ -586,7 +597,7 @@ namespace HelloWorld
                     state.Alive(localSeat)&&state.Phase==DuelPhase.Playing&&(state.Stage==DuelStage.Countdown||state.Stage==DuelStage.Racing));
                 if (aliveView && firstPerson != null)
                 { position=Vec(DuelGunplay.Eye(localSeat)); rotation=firstPerson.Rotation(now); lastEye=position; lastEyeRotation=rotation; }
-                bool faceFall = !finalView && ownDeath && state.Mode == DuelMode.PvP;
+                bool faceFall = !finalView && ownDeath && (state.Mode == DuelMode.PvP||own.LivesRemaining==0);
                 if (faceFall)
                 {
                     float age = Mathf.Max(0, (float)(now - state.ForSeat(localSeat).DiedAt));
@@ -594,15 +605,14 @@ namespace HelloWorld
                     Vector3 eye = head.TransformPoint(new Vector3(0, 0.04f, -0.13f));
                     Quaternion eyeRotation = head.rotation * Quaternion.Euler(0, 180, 0);
                     float enter = Smooth(age / 0.12f);
-                    float spectate = Smooth((age - FallDuration - DeathFaceHold) / 0.4f);
+                    float spectate = Smooth((age - spectatorStart) / 0.4f);
                     Vector3 home = lastEye;
                     Quaternion homeRotation = lastEyeRotation;
-                    Vector3 spectator = around * spectatorHome;
-                    position = Vector3.Lerp(Vector3.Lerp(home, eye, enter), spectator, spectate);
+                    Vector3 spectatorPosition = around * spectatorHome;
+                    position = Vector3.Lerp(Vector3.Lerp(home, eye, enter), spectatorPosition, spectate);
                     rotation = Quaternion.Slerp(Quaternion.Slerp(homeRotation, eyeRotation, enter),
-                        Quaternion.LookRotation(new Vector3(0, 1.05f, 0) - spectator), spectate);
+                        Quaternion.LookRotation(new Vector3(0, 1.05f, 0) - spectatorPosition), spectate);
                 }
-                var own=state.ForSeat(localSeat);
                 bool recovering=!finalView&&ownDeath&&own.LivesRemaining>0&&own.ReviveAt>=0&&now>=own.ReviveAt;
                 if(recovering)
                 {
@@ -613,18 +623,20 @@ namespace HelloWorld
                 }
                 if(ready&&!fixedView&&!aliveView&&!recovering&&firstPerson!=null)
                 {
-                    float freeLook=faceFall?Smooth((float)(now-own.DiedAt-FallDuration-DeathFaceHold)/.4f):1;
+                    float freeLook=faceFall?Smooth((float)(now-own.DiedAt-spectatorStart)/.4f):1;
                     rotation=Quaternion.Slerp(rotation,firstPerson.OverviewRotation(rotation),freeLook);
                 }
-                // Hide the owner's animation only while the camera uses their first-person view.
-                ApplyLocalVisibility(localSeat,(aliveView&&firstPerson!=null)||recovering,(faceFall||recovering)&&Vector3.Distance(position,puppets[localSeat].Head.position)<.4f);
+                if(watching)
+                {position=Vec(DuelGunplay.Eye(viewSeat));rotation=spectator.Rotation(state,now);fixedView=true;faceFall=false;}
+                // A watched player's head is hidden only on this spectator's camera.
+                ApplyLocalVisibility(viewSeat,watching||(aliveView&&firstPerson!=null)||recovering,!watching&&(faceFall||recovering)&&Vector3.Distance(position,puppets[localSeat].Head.position)<.4f);
                 viewCamera.nearClipPlane = faceFall ? 0.025f : 0.05f;
                 float elapsed = Mathf.Max(0, (float)(now - lastShotAt));
                 float shake = !fixedView && lastShotAt >= 0 ? Mathf.Exp(-elapsed * 13) * (HitPulse > 0 ? 0.06f : 0.02f) : 0;
                 // Aim and sight must share one rotation, including server sway. Hit motion is confined to non-aim views.
-                viewCamera.transform.position = position + (aliveView ? Vector3.zero : new Vector3(Mathf.Sin(elapsed * 91), Mathf.Cos(elapsed * 73), 0) * shake);
+                viewCamera.transform.position = position + (aliveView||watching ? Vector3.zero : new Vector3(Mathf.Sin(elapsed * 91), Mathf.Cos(elapsed * 73), 0) * shake);
                 viewCamera.transform.rotation = aliveView||fixedView ? rotation : rotation * Quaternion.Euler(-HitPulse * 5, 0, HitPulse * 3);
-                viewCamera.fieldOfView = aliveView ? firstPerson.Ads ? DuelGunplay.AdsFov(state.ForSeat(localSeat).Weapon) : DuelGunplay.BaseFov : 57;
+                viewCamera.fieldOfView = watching ? viewAds?DuelGunplay.AdsFov(state.ForSeat(viewSeat).Weapon):DuelGunplay.BaseFov : aliveView ? firstPerson.Ads ? DuelGunplay.AdsFov(state.ForSeat(localSeat).Weapon) : DuelGunplay.BaseFov : 57;
             }
         }
         private Puppet BuildPuppet(int seat, Vector3 position, Quaternion rotation)
@@ -656,7 +668,7 @@ namespace HelloWorld
                 Part("Waistcoat pocket",PrimitiveType.Cube,p.Torso,new Vector3(side*.16f,-.16f,-.216f),new Vector3(.12f,.024f,.018f),leather);
             }
             for(int i=0;i<3;i++)Part("Brass waistcoat button",PrimitiveType.Cube,p.Torso,new Vector3(0,-.08f-i*.095f,-.215f),new Vector3(.022f,.025f,.014f),trim);
-            Faceted("Neck",p.Root,new Vector3(0,1.67f-DuelGunplay.SeatedDrop,0),Vector3.one,skin,new Vector4(-.075f,.075f,.07f,0),new Vector4(.08f,.08f,.075f,0));
+            var neck=Faceted("Neck",p.Root,new Vector3(0,1.67f-DuelGunplay.SeatedDrop,0),Vector3.one,skin,new Vector4(-.075f,.075f,.07f,0),new Vector4(.08f,.08f,.075f,0));
             p.Head = new GameObject("Head pivot").transform; p.Head.SetParent(p.Root, false); p.Head.localPosition = new Vector3(0, 1.87f-DuelGunplay.SeatedDrop, -0.04f);
             Faceted("Head",p.Head,Vector3.zero,Vector3.one,skin,
                 new Vector4(-.215f,.075f,.075f,-.025f),new Vector4(-.13f,.135f,.13f,-.015f),new Vector4(.015f,.177f,.163f,0),new Vector4(.145f,.166f,.149f,.014f),new Vector4(.213f,.104f,.105f,.018f));
@@ -693,19 +705,21 @@ namespace HelloWorld
                 Limb(shin,p.Root.TransformPoint(new Vector3(x,.65f-DuelGunplay.SeatedDrop,-.33f)),p.Root.TransformPoint(new Vector3(x,.16f,-.36f)),.18f);
                 MeshPart("Shoe",shoeMesh,p.Root,new Vector3(x,.10f,-.40f),new Vector3(.22f,.17f,.32f),leather);
             }
-            p.HeadRenderers = p.Head.GetComponentsInChildren<Renderer>();
+            BuildNoruFace(p,seat);
+            var headRenderers=new List<Renderer>(p.Head.GetComponentsInChildren<Renderer>());
+            headRenderers.Add(neck.GetComponent<Renderer>());p.HeadRenderers=headRenderers.ToArray();
             p.Renderers=p.Root.GetComponentsInChildren<Renderer>(true);
             return p;
         }
-        private void ApplyLocalVisibility(int localSeat,bool hideOwn,bool hideFace)
+        private void ApplyLocalVisibility(int localSeat,bool firstPersonView,bool hideFace)
         {
             for(int seat=0;seat<puppets.Length;seat++)
             {
                 var p=puppets[seat];
-                foreach(var renderer in p.Renderers)renderer.forceRenderingOff=hideOwn&&seat==localSeat;
-                foreach(var renderer in p.HeadRenderers)renderer.forceRenderingOff=(hideOwn||hideFace)&&seat==localSeat;
+                foreach(var renderer in p.Renderers)renderer.forceRenderingOff=false;
+                foreach(var renderer in p.HeadRenderers)renderer.forceRenderingOff=(firstPersonView||hideFace)&&seat==localSeat;
             }
-            drinkVisuals.SetLocalVisibility(localSeat,hideOwn);
+            drinkVisuals.SetLocalVisibility(localSeat,false);
         }
         private Mesh AvatarMesh(string name,params Vector4[] sections)
         {var mesh=DuelFacetedMesh.Sections(name,sections);meshes.Add(mesh);return mesh;}
@@ -738,17 +752,13 @@ namespace HelloWorld
             if(targetPose.RightChin>0||targetPose.LeftChin>0)
             {
                 float release=Mathf.SmoothStep(0,1,Mathf.InverseLerp(20,55,Mathf.Max(Mathf.Abs(turn),Mathf.Abs(lookPitch)*1.5f)));
-                targetPose.RightChin*=1-release;targetPose.LeftChin*=1-release;targetPose.Lean=Mathf.Lerp(targetPose.Lean,-8,release);
+                targetPose.RightChin*=1-release;targetPose.LeftChin*=1-release;
             }
-            float supported=Mathf.Max(targetPose.RightChin,targetPose.LeftChin);
-            if(context.DrinkAction!=DuelDrinkAction.None)supported=Mathf.Max(supported,DuelCharacterPose.DrinkWeight(context.DrinkProgress));
-            p.BodyYaw=Mathf.LerpAngle(p.BodyYaw,Mathf.Clamp(turn*.25f,-22,22)*Mathf.Lerp(1,.25f,supported),follow);
-            p.HeadYaw=Mathf.LerpAngle(p.HeadYaw,Mathf.Clamp(turn-p.BodyYaw,-90,90),follow);
-            p.HeadPitch=Mathf.Lerp(p.HeadPitch,Mathf.Clamp(lookPitch,-55,55),follow);
+            p.Look.Step(turn,lookPitch,Time.deltaTime);
             p.Pose=p.PoseInitialized?DuelCharacterPose.Blend(p.Pose,targetPose,1-Mathf.Exp(-Time.deltaTime*9)):targetPose;p.PoseInitialized=true;
             var pose=p.Pose;
             float looking=1-fall;
-            p.Body.localRotation = Quaternion.Euler(-82 * fall+pose.Lean*looking, p.BodyYaw*looking, pose.Roll*looking);
+            p.Body.localRotation = Quaternion.Euler(-82 * fall+pose.Lean*looking, 0, pose.Roll*looking);
             // Rotate around the waist seam, keeping the seated pelvis in the chair.
             // A forward translation here separates the jacket from the hips.
             var waist=new Vector3(0,-.12f,0);
@@ -757,7 +767,7 @@ namespace HelloWorld
             p.Head.localPosition = new Vector3(0, 0.92f, Mathf.Lerp(-0.04f, -0.10f, fall));
             // Compose the gaze in seat space so a leaning/rolling torso cannot tilt
             // the neck's yaw axis or reverse the player's vertical look.
-            var gaze=p.Root.rotation*Quaternion.Euler(p.HeadPitch+pose.HeadLift-hit*24,p.BodyYaw+p.HeadYaw,hit*16);
+            var gaze=p.Root.rotation*Quaternion.Euler(p.Look.Pitch+pose.HeadLift-hit*24,p.Look.Yaw,p.Look.Roll+hit*16);
             p.Head.localRotation=Quaternion.Slerp(Quaternion.Euler(-hit*24,0,hit*16),Quaternion.Inverse(p.Body.rotation)*gaze,looking);
             p.Torso.localRotation = Quaternion.Euler(-hit * 8, 0, hit * 5);
             Vector3 shoulder = p.Body.TransformPoint(new Vector3(-0.28f, 0.53f, 0));
@@ -788,6 +798,7 @@ namespace HelloWorld
             var rightRotation=attached?holdingHand.rotation:p.Body.rotation*Quaternion.Euler(pose.RightEuler);
             rightRotation=Quaternion.Slerp(rightRotation,drinkRightRotation,drinkVisuals.RightGrip(p.Seat));
             p.Hand.rotation = Quaternion.Slerp(p.Hand.rotation,rightRotation,follow);
+            if(context.Ink&&fall<.001f)p.Hand.rotation=Quaternion.Euler(-lookPitch,lookYaw,0)*Quaternion.Euler(0,85,0);
             p.Hand.rotation=Quaternion.Slerp(p.Hand.rotation,p.Root.rotation,brace);
             p.Hand.gameObject.SetActive(!holdingHand.gameObject.activeSelf);
             Vector3 leftRest = Vector3.Lerp(IdlePoint(p,pose.Left),p.Body.TransformPoint(new Vector3(.42f,.6f,-.12f)),fall);

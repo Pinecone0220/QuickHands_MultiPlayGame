@@ -85,7 +85,7 @@ public sealed class AvatarPreviewQA:MonoBehaviour
         foreach(int owner in new[]{0,1,5})
         {
             visibility.Invoke(table,new object[]{owner,true,false});
-            for(int i=0;i<6;i++)foreach(var r in Field<Renderer[]>(puppets.GetValue(i),"Renderers"))Check(r.forceRenderingOff==(i==owner),"only the local avatar is hidden, independent of camera distance");
+            for(int i=0;i<6;i++){var avatar=puppets.GetValue(i);var heads=Field<Renderer[]>(avatar,"HeadRenderers");foreach(var r in Field<Renderer[]>(avatar,"Renderers"))Check(r.forceRenderingOff==(i==owner&&Array.IndexOf(heads,r)>=0),"only the local head is hidden, independent of camera distance");}
             Check(!table.TryGetNameViewport(owner,out _),"local hidden avatar never shows its own floating name");
             foreach(var r in Field<Transform>(Field<Array>(table,"rigs").GetValue(owner,0),"Gun").GetComponentsInChildren<Renderer>(true))Check(!r.forceRenderingOff,"local weapon and weapon hands remain separate from hidden avatar");
         }

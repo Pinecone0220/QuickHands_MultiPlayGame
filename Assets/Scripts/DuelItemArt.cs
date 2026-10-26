@@ -4,7 +4,7 @@ namespace HelloWorld
     // Matches the existing procedural weapon icon style. No UI text is baked into the thumbnails.
     public static class DuelItemArt
     {
-        public static string Name(DuelItem item)=>item==DuelItem.Ink?"먹물팩":item==DuelItem.Recovery?"응급 앰플":"테이저건";
+        public static string Name(DuelItem item)=>item==DuelItem.NoruFace?"노루페이스":item==DuelItem.Bullet?"총알":item==DuelItem.Ink?"먹물팩":item==DuelItem.Recovery?"응급 앰플":"테이저건";
         public static Texture2D Icon(DuelItem item)
             => CreateIcon(item);
         public static Texture2D CreateIcon(DuelItem item)
@@ -13,7 +13,30 @@ namespace HelloWorld
             for(int y=0;y<n;y++)for(int x=0;x<n;x++)
             {
                 Color c=Color.clear;
-                if(item==DuelItem.Ink)
+                if(item==DuelItem.NoruFace)
+                {
+                    bool body=x>=38&&x<=89&&y>=21&&y<=96;
+                    bool sleeve=y>=27&&y<=88&&(x>=18&&x<=40||x>=87&&x<=109);
+                    if(body||sleeve)c=new Color(.10f,.16f,.21f,1);
+                    if((body||sleeve)&&y%14<=2)c=new Color(.045f,.075f,.10f,1);
+                    if(body&&x>=41&&x<=45)c=new Color(.23f,.30f,.35f,1);
+                    if(y>=91&&y<=106&&(x>=42&&x<=58||x>=69&&x<=85))c=new Color(.17f,.23f,.28f,1);
+                    if(y>=22&&y<=94&&x>=62&&x<=65)c=new Color(.65f,.69f,.65f,1);
+                    if(y>=24&&y<=27&&x>=20&&x<=107)c=new Color(.055f,.085f,.11f,1);
+                }
+                else if(item==DuelItem.Bullet)
+                {
+                    for(int cartridge=0;cartridge<2;cartridge++)
+                    {
+                        int cx=43+cartridge*40;float dx=Mathf.Abs(x-cx);
+                        if(y>=24&&y<=77&&dx<=12)c=new Color(.72f,.51f,.19f,1);
+                        if(y>=27&&y<=75&&x>=cx-8&&x<=cx-4)c=new Color(.96f,.79f,.42f,1);
+                        if(y>=20&&y<=27&&dx<=15)c=new Color(.88f,.68f,.29f,1);
+                        if(y>=77&&y<=105&&dx<=12*(1-(y-77)/30f))c=new Color(.67f,.37f,.20f,1);
+                        if(y>=78&&y<=98&&x>=cx-5&&x<=cx-2&&dx<=12*(1-(y-77)/30f))c=new Color(.89f,.61f,.37f,1);
+                    }
+                }
+                else if(item==DuelItem.Ink)
                 {
                     float width=28*(1-Mathf.Abs(y-57)/85f);
                     if(y>=25&&y<=86&&Mathf.Abs(x-63)<=width)c=new Color(.19f,.12f,.27f,1);

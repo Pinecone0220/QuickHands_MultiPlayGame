@@ -92,7 +92,7 @@ public static class RouletteRulesTests
             Check(d.Game.Winner == count - 1 && d.Stage == DuelStage.Idle, "last connected survivor wins");
             Check(d.Ready(count - 1, now), "solo ready allowed"); Check(d.Stage == DuelStage.Idle, "solo cannot start");
             Check(d.Join(0, now), "vacant seat joins between matches");
-            Check(d.Game.ReadyMask == 0, "roster change clears readiness");
+            Check(d.Game.ReadyMask == (1 << (count - 1)), "roster change preserves the existing player's readiness");
         }
         double[] means = new double[3];
         for (int count = 2; count <= 4; count++) for (int level = 0; level < 3; level++) for (int seed = 0; seed < 20; seed++)

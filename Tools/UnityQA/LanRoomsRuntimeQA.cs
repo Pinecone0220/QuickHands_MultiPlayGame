@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
@@ -53,8 +53,8 @@ public sealed class LanRoomsRuntimeQA:MonoBehaviour
         using(var a=new DuelLanRooms())using(var b=new DuelLanRooms())using(var browser=new DuelLanRooms())
         {
             Check(a.StartHosting()&&b.StartHosting(),"multiple rooms bind distinct automatic discovery ports");Check(browser.Search(0),"browser starts without user IP or port");
-            var ra=new DuelLanRoom{id=id,title="QA discovery A",port=18001,count=1,max=6,protocol=DuelLanRooms.Protocol,locked=true,joinable=true};
-            var rb=new DuelLanRoom{id=Guid.NewGuid().ToString("N"),title="QA discovery B",port=18002,count=2,max=6,protocol=DuelLanRooms.Protocol,joinable=true};
+            var ra=new DuelLanRoom{id=id,code="TESTA",title="QA discovery A",port=18001,count=1,max=6,protocol=DuelLanRooms.Protocol,locked=true,joinable=true};
+            var rb=new DuelLanRoom{id=Guid.NewGuid().ToString("N"),code="TESTB",title="QA discovery B",port=18002,count=2,max=6,protocol=DuelLanRooms.Protocol,joinable=true};
             for(int i=0;i<40;i++){double t=i*.1;browser.Tick(null,t);a.Tick(ra,t);b.Tick(rb,t);yield return null;}
             int foundA=0,foundB=0;foreach(var r in browser.Rooms){if(r.id==ra.id)foundA++;if(r.id==rb.id)foundB++;}
             Check(foundA==1&&foundB==1,"broadcast and loopback discover each room only once");
@@ -71,7 +71,7 @@ public sealed class LanRoomsRuntimeQA:MonoBehaviour
     {
         if(role=="host")
         {
-            manager.CreateRoom(Title,"1234");while(HelloWorldPlayer.Local==null)yield return null;player=HelloWorldPlayer.Local;
+            manager.CreateRoom(Title,"1234","LANQA001");while(HelloWorldPlayer.Local==null)yield return null;player=HelloWorldPlayer.Local;
             Check(manager.Rooms.Hosting&&manager.SessionPort>0,"host automatically opens game and discovery ports");Check(player.NetworkManager.NetworkConfig.ProtocolVersion==DuelLanRooms.Protocol,"current protocol");Mark("hosted");
             while(D.Game.ConnectedMask!=3||!Seen("observer","listed"))yield return null;
             D.SetAutoSelectItems(true);Publish();player.Rematch();Mark("ready");
@@ -99,7 +99,7 @@ public sealed class LanRoomsRuntimeQA:MonoBehaviour
             {
                 Check(room.count==2,"browser sees connected player count");Mark("listed");while(!Seen("host","started"))yield return null;
                 while(Find(Title)==null||Find(Title).joinable)yield return null;room=Find(Title);Check(!room.joinable,"running game disables entry in discovery");
-                var stale=new DuelLanRoom{id=room.id,title=room.title,address=room.address,port=room.port,count=2,max=6,locked=true,joinable=true};
+                var stale=new DuelLanRoom{id=room.id,code=room.code,title=room.title,address=room.address,port=room.port,count=2,max=6,locked=true,joinable=true};
                 manager.JoinRoom(stale,"1234");while(manager.Busy)yield return null;Check(manager.Status.Contains("진행 중"),"server also rejects stale-list entry while running");Mark("rejected");
                 manager.BrowseRooms();while(!Seen("host","closed"))yield return null;while(Find(Title)!=null)yield return null;
                 Check(manager.Rooms.Rooms.Count==0||Find(Title)==null,"closed host disappears without manual refresh");Mark("expired");
@@ -119,14 +119,14 @@ public sealed class LanRoomsRuntimeQA:MonoBehaviour
     {
         using(var listing=new DuelLanRooms())
         {
-            Check(listing.StartHosting(),"preview listing available");var r=new DuelLanRoom{id=Guid.NewGuid().ToString("N"),title="위스키 한 잔",count=3,max=6,port=18009,locked=true,joinable=true,protocol=DuelLanRooms.Protocol};
+            Check(listing.StartHosting(),"preview listing available");var r=new DuelLanRoom{id=Guid.NewGuid().ToString("N"),code="WHISKY",title="위스키 한 잔",count=3,max=6,port=18009,locked=true,joinable=true,protocol=DuelLanRooms.Protocol};
             typeof(RouletteView).GetMethod("SetRoomBrowser",F).Invoke(view,new object[]{true});
             while(Field<VisualElement>(view,"roomRows").childCount==0){listing.Tick(r,Time.realtimeSinceStartupAsDouble);yield return null;}
             Check(Field<TextField>(view,"roomPasswordInput").isPasswordField,"creation password masked");
             foreach(var f in view.GetComponent<UIDocument>().rootVisualElement.Query<TextField>().ToList())Check(f.label!="호스트 IP"&&f.label!="포트","menu removes manual endpoint fields");
             yield return Capture("LAN-Room-List.png");typeof(RouletteView).GetMethod("SetRoomBrowser",F).Invoke(view,new object[]{false});
         }
-        manager.CreateRoom("연습방","");while(HelloWorldPlayer.Local==null)yield return null;player=HelloWorldPlayer.Local;
+        manager.CreateRoom("연습방","","PRACTICE");while(HelloWorldPlayer.Local==null)yield return null;player=HelloWorldPlayer.Local;
         D.Join(1,Now);D.Join(2,Now);D.SetAutoSelectItems(true);D.Ready(0,Now);D.Ready(1,Now);Publish();yield return null;yield return null;fps.enabled=false;
         var keyboard=InputSystem.AddDevice<Keyboard>();keyboard.MakeCurrent();Keys(keyboard);
         Check(!DuelPointer.AltHeld&&!DuelPointer.BlocksActions,"default mode stays in gameplay");

@@ -1,0 +1,12 @@
+{
+  "InkThrow": {
+    "duration": 0.24,
+    "peak": 0.4,
+    "rms": 0.0684
+  },
+  "InkImpact": {
+    "duration": 0.36,
+    "peak": 0.62,
+    "rms": 0.0534
+  }
+}

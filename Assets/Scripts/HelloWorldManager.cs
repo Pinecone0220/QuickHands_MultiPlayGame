@@ -15,7 +15,7 @@ namespace HelloWorld
     {
         public static HelloWorldManager Instance { get; private set; }
         public bool Busy { get; private set; }
-        public string Status { get; private set; } = "모드를 선택하세요.";
+        public string Status { get; private set; } = "Alt를 눌러 마우스를 조작할 수 있습니다.";
         public RouletteRules ServerGame => director?.Game;
         private DuelDirector director;
         private double ServerNow => network.ServerTime.Time;
@@ -52,9 +52,11 @@ namespace HelloWorld
             gameObject.AddComponent<LobbyJoinAudio>();
             gameObject.AddComponent<DuelBackgroundMusic>();
             gameObject.AddComponent<DuelGameAudio>();
+            gameObject.AddComponent<DuelSpectator>();
             gameObject.AddComponent<DuelFirstPerson>();
             Table = gameObject.AddComponent<RouletteTable>();
             gameObject.AddComponent<RouletteView>().Initialize(this);
+            gameObject.AddComponent<DuelLifeFeedback>();
             gameObject.AddComponent<DuelChat>();
             gameObject.AddComponent<DuelPointer>();
             if (network == null) { Status = "씬에 NetworkManager가 없습니다."; return; }
@@ -68,7 +70,7 @@ namespace HelloWorld
 
         public void Begin(DuelMode mode, bool join, string address, string portText)
         {
-            if (network == null || Busy || network.IsListening || network.ShutdownInProgress) return;
+            if (network == null || Busy || RoomRequestPending || network.IsListening || network.ShutdownInProgress) return;
             if (!ushort.TryParse(portText, out ushort port) || port == 0)
             { Status = "포트는 1~65535 사이의 숫자여야 합니다."; return; }
             if (join && !IPAddress.TryParse(address.Trim(), out _))
@@ -94,7 +96,7 @@ namespace HelloWorld
             Array.Clear(damageReports, 0, damageReports.Length);
             Array.Clear(publishedLives,0,publishedLives.Length);
             roundResults = default;
-            if(mode==DuelMode.AI){roomId=roomProof=RoomTitle="";}
+            if(mode==DuelMode.AI){roomId=roomProof=RoomTitle=RoomCode="";}
             Rooms.StopBrowsing();
             network.NetworkConfig.ConnectionData = roomId.Length>0?DuelRoomAdmission.Encode(roomId,Nickname,roomProof):Encoding.UTF8.GetBytes(NicknamePolicy.Normalize(Nickname));
             leaving = everConnected = false;
@@ -163,7 +165,7 @@ namespace HelloWorld
         {
             bool host = request.ClientNetworkId == Unity.Netcode.NetworkManager.ServerClientId;
             bool allowed = ServerGame != null && (host ||
-                (ServerGame.Mode == DuelMode.PvP && director.Stage == DuelStage.Idle && ServerGame.Phase != DuelPhase.Playing && reservations.Count < RouletteRules.MaxPlayers));
+                (ServerGame.Mode == DuelMode.PvP && director.Stage == DuelStage.Idle && ServerGame.Phase != DuelPhase.Playing && OccupiedRoomSlots < RouletteRules.MaxPlayers));
             string requestedName = "";
             string admissionError="";
             try
@@ -420,12 +422,13 @@ namespace HelloWorld
         private void Fail(string message)
         {
             Status = message;
-            Rooms.StopHosting();roomId=roomProof=RoomTitle="";
+            CancelRoomRequest();Rooms.StopHosting();roomId=roomProof=RoomTitle=RoomCode="";
             leaving = true;
             if (network != null && !network.ShutdownInProgress) network.Shutdown();
         }
         public void Leave()
         {
+            if(RoomRequestPending){CancelRoomRequest();Status="방 검색을 취소했습니다.";return;}
             if (Busy) Fail("테이블을 떠났습니다. 새 모드를 선택하세요.");
         }
         private void OnDestroy()

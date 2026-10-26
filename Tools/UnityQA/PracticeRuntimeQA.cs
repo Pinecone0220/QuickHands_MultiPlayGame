@@ -101,8 +101,8 @@ public sealed class PracticeRuntimeQA:MonoBehaviour
         {writer.WriteNetworkSerializable(s);using(var reader=new FastBufferReader(writer,Allocator.Temp)){reader.ReadNetworkSerializable(out DuelSnapshot copy);Check(copy.Equals(s)&&copy.IsPracticing(1),"practice fields and frozen result serialize together");}}
         now+=2;Aim(d,1,0,now,out float jy,out float jp);d.Fire(1,jy,jp,true,d.ForSeat(1).Version,now,now);
         int previousSession=d.ForSeat(1).PracticeSession;d.Join(3,now+.01);d.Tick(now+.6);
-        Check(d.PracticeMask==0,"new join resets ready practice through existing room policy");
-        Check(d.ForSeat(1).FiredAt<0&&d.ForSeat(1).PracticeSession>previousSession,"new join invalidates old visuals and delayed confirmations");
+        Check(d.PracticeMask==3,"new join keeps existing players ready and newcomer unready");
+        Check(d.ForSeat(1).PracticeSession==previousSession,"new join preserves the active practice session");
     }
     IEnumerator FireAt(int target)
     {
