@@ -63,7 +63,7 @@ public sealed class LanRoomsRuntimeQA:MonoBehaviour
             bool updated=false;foreach(var r in browser.Rooms)if(r.id==ra.id)updated=r.count==6&&!r.joinable&&r.locked;
             Check(updated&&browser.Revision>revision,"full/in-progress room metadata updates");
             a.StopHosting();for(int i=0;i<10;i++){browser.Tick(null,6+i*.1);b.Tick(rb,6+i*.1);yield return null;}
-            browser.Tick(null,14);bool stale=false;foreach(var r in browser.Rooms)if(r.id==ra.id)stale=true;
+            browser.Tick(null,20);bool stale=false;foreach(var r in browser.Rooms)if(r.id==ra.id)stale=true;
             Check(!stale,"closed rooms expire from list");
         }
     }

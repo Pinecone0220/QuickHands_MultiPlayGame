@@ -6,6 +6,14 @@ namespace HelloWorld
         public DuelLanRooms Rooms {get;}=new DuelLanRooms();
         public string RoomTitle {get;private set;}="";
         public string RoomCode {get;private set;}="";
+        public bool CanShareRoomInvite=>Busy&&!leaving&&network!=null&&network.IsHost&&roomId.Length>0;
+        public string RoomInvite=>CanShareRoomInvite?DuelRoomInvite.Encode(new DuelLanRoom{id=roomId,code=RoomCode,title=RoomTitle,port=SessionPort,count=RouletteRules.Count(ServerGame.ConnectedMask),max=6,protocol=DuelLanRooms.Protocol,locked=roomProof.Length>0,joinable=true}):"";
+        public void JoinRoomInvite(string invite,string password)
+        {
+            if(Busy||RoomRequestPending)return;
+            if(!DuelRoomInvite.TryDecode(invite,out var room,out var error)){Status=error;return;}
+            Rooms.StopBrowsing();JoinRoom(room,password);
+        }
         private string roomId="",roomProof="";
         private enum RoomRequest {None,Create,Join}
         private RoomRequest roomRequest;
@@ -41,7 +49,7 @@ namespace HelloWorld
             double now=UnityEngine.Time.realtimeSinceStartupAsDouble;
             if(!Rooms.Search(now)){Status=Rooms.Error;return;}
             roomRequest=request;pendingCode=code;pendingTitle=title;pendingPassword=password;
-            roomRequestEnds=now+2;Status=request==RoomRequest.Create?"방 코드 중복을 확인하는 중…":"방 코드로 찾는 중…";
+            roomRequestEnds=now+DuelLanRooms.LookupDuration;Status=request==RoomRequest.Create?"방 코드 중복을 확인하는 중…":"방 코드로 찾는 중…";
         }
         private void FinishRoomRequest(double now)
         {
@@ -55,7 +63,7 @@ namespace HelloWorld
                 if(matches>0){Status="이미 사용 중인 방 코드입니다. 다른 코드를 입력하세요.";return;}
                 CreateRoomNow(title,password,code);
             }
-            else if(matches==0)Status="해당 방 코드를 찾지 못했습니다. 같은 Wi-Fi/LAN인지 확인하세요.";
+            else if(matches==0)Status=Rooms.IncompatibleCount>0?"다른 버전의 방이 발견됐습니다. 같은 최신 빌드로 실행하세요.":"해당 방 코드를 찾지 못했습니다. 방 목록 또는 방장의 초대 코드로 참가하세요.";
             else if(matches>1)Status="같은 방 코드가 여러 개입니다. 방 목록에서 선택하세요.";
             else JoinRoom(match,password);
         }
@@ -67,6 +75,7 @@ namespace HelloWorld
             if(!room.joinable||room.count>=6){Status=room.count>=6?"가득 찬 방입니다.":"이미 게임이 진행 중인 방입니다.";return;}
             if(!ValidPassword(password)){Status="비밀번호는32자 이내로 입력하세요.";return;}
             roomId=room.id;roomProof=DuelRoomAdmission.PasswordProof(roomId,password);RoomTitle=room.title;RoomCode=room.code;
+            UnityEngine.Debug.Log("[LAN] Connecting to "+room.address+":"+room.port+", protocol="+DuelLanRooms.Protocol);
             Begin(DuelMode.PvP,true,room.address,room.port.ToString());
         }
         private static bool ValidPassword(string password)

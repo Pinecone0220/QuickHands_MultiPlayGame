@@ -383,7 +383,7 @@ namespace HelloWorld
                 players.Clear(); reservations.Clear();
             }
             if (Busy && !leaving && !everConnected && Time.realtimeSinceStartupAsDouble > connectDeadline)
-                Fail("연결 시간이 초과되었습니다. 방 목록을 새로고침해 다시 참가하세요.");
+                Fail("방에 응답이 없습니다. 방장과 같은 LAN인지, 게임의 방화벽 허용 여부를 확인하세요.");
             if (!leaving && network.IsServer && director != null)
             {
                 if (director.Tick(ServerNow)) Publish();
