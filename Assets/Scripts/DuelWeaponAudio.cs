@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -50,7 +50,8 @@ namespace HelloWorld
             // Small deterministic differences preserve the mechanism's character without a chorus.
             int variation=(a.Previous.Version+seat*7)&7;
             source.pitch=report?1:.98f+variation*.005f;
-            source.PlayOneShot(clip,gain);Played?.Invoke(seat,key);
+            if(key.StartsWith("Taser")){int skin=DuelSkinEffects.Skin(seat,DuelItem.Taser);int tier=DuelSkinEffects.Tier(skin);if(tier>0)source.pitch=1+.012f*tier+.006f*(skin%3);}
+            source.PlayOneShot(clip,gain*DuelSettings.Effects);Played?.Invoke(seat,key);
         }
         private static string Prefix(DuelWeapon w)=>w==DuelWeapon.BAS?"Bas":w==DuelWeapon.SawedOff?"Saw":w==DuelWeapon.Taser?"Taser":"Revolver";
         private static string Mechanism(DuelWeapon w,DuelAction action)
@@ -126,15 +127,15 @@ namespace HelloWorld
                 a.Previous=state;a.Active=active;
             }
             bool contact=combat&&state.IsStunned(now);
-            if(contact&&!a.Contact.isPlaying)
-            {a.Contact.clip=Clip("TaserContactLoop");a.Contact.loop=true;a.Contact.volume=.18f;a.Contact.Play();}
-            else if(!contact&&a.Contact.isPlaying)a.Contact.Stop();
+            if(contact)
+            {a.Contact.volume=.18f*DuelSettings.Effects;if(!a.Contact.isPlaying){a.Contact.clip=Clip("TaserContactLoop");a.Contact.loop=true;a.Contact.Play();}}
+            else if(a.Contact.isPlaying)a.Contact.Stop();
         }
         private void ResetSeat(int seat)
         {var a=seats[seat];if(a==null)return;a.Handling.Stop();a.Report.Stop();a.Contact.Stop();a.Initialized=false;}
         public void Clear(){for(int i=0;i<seats.Length;i++){ResetSeat(i);if(seats[i]!=null)seats[i].Props.Stop();}}
         public void PlayTable(int seat,string key,Vector3 position)
-        {if(disabled||seat<0||seat>=seats.Length)return;var a=ForSeat(seat);var clip=Clip(key);if(clip==null)return;a.Props.transform.position=position;a.Props.PlayOneShot(clip,.42f);Played?.Invoke(seat,key);}
+        {if(disabled||seat<0||seat>=seats.Length)return;var a=ForSeat(seat);var clip=Clip(key);if(clip==null)return;a.Props.transform.position=position;a.Props.PlayOneShot(clip,.42f*DuelSettings.Effects);Played?.Invoke(seat,key);}
         private void OnDisable()=>Clear();
     }
 }

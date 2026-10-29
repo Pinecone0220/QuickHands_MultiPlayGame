@@ -20,17 +20,20 @@
         public int Shots { get; private set; }
         public float ShotTimeLimit { get; private set; } = 10;
         public bool UnlimitedItems { get; private set; }
+        public bool NoItemCooldown { get; private set; }
         public bool AutoSelectItems { get; private set; }
         public bool ManualMiniGame { get; private set; }
         public bool ResetDeveloperSettings()
         {
-            bool changed=ShotTimeLimit!=10||UnlimitedItems||ManualMiniGame||AutoSelectItems;
-            ShotTimeLimit=10;UnlimitedItems=ManualMiniGame=AutoSelectItems=false;return changed;
+            bool changed=ShotTimeLimit!=10||UnlimitedItems||NoItemCooldown||ManualMiniGame||AutoSelectItems;
+            ShotTimeLimit=10;UnlimitedItems=NoItemCooldown=ManualMiniGame=AutoSelectItems=false;return changed;
         }
         public bool SetAutoSelectItems(bool enabled)
         {if(Phase==DuelPhase.Playing||AutoSelectItems==enabled)return false;AutoSelectItems=enabled;return true;}
         public bool SetUnlimitedItems(bool enabled)
         {if(Phase==DuelPhase.Playing||UnlimitedItems==enabled)return false;UnlimitedItems=enabled;return true;}
+        public bool SetNoItemCooldown(bool enabled)
+        {if(Phase==DuelPhase.Playing||NoItemCooldown==enabled)return false;NoItemCooldown=enabled;return true;}
         public bool SetManualMiniGame(bool enabled)
         {if(Phase==DuelPhase.Playing||ManualMiniGame==enabled)return false;ManualMiniGame=enabled;return true;}
         public bool Heal(int seat,int amount)
@@ -66,7 +69,7 @@
             if(Phase==DuelPhase.Playing||!Has(ConnectedMask,seat)||!Has(ReadyMask,seat))return false;
             ReadyMask&=~(1<<seat);return true;
         }
-        public bool CanStart => Count(ConnectedMask) >= 2 && ReadyMask == ConnectedMask && Phase != DuelPhase.Playing;
+        public bool CanStart => Has(ConnectedMask,0) && Count(ConnectedMask) >= 2 && (ReadyMask&ConnectedMask&~1)==(ConnectedMask&~1) && Phase != DuelPhase.Playing;
         public bool Start()
         {
             if (!CanStart) return false;

@@ -1,4 +1,4 @@
-﻿using Unity.Netcode;
+using Unity.Netcode;
 using UnityEngine;
 using Unity.Collections;
 
@@ -9,6 +9,9 @@ namespace HelloWorld
     {
         public NetworkVariable<DuelSnapshot> State = new NetworkVariable<DuelSnapshot>();
         public NetworkVariable<int> Seat = new NetworkVariable<int>(-1);
+        public NetworkVariable<int> CosmeticSkins = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+        private static readonly System.Collections.Generic.List<HelloWorldPlayer> cosmeticPlayers = new System.Collections.Generic.List<HelloWorldPlayer>();
+        public static int SkinsForSeat(int seat) { foreach(var p in cosmeticPlayers) if(p != null && p.IsSpawned && p.Seat.Value == seat) return p.CosmeticSkins.Value; return 0; }
         public NetworkVariable<DuelDamageReport> DeathReport = new NetworkVariable<DuelDamageReport>(default,
             NetworkVariableReadPermission.Owner, NetworkVariableWritePermission.Server);
         public static HelloWorldPlayer Local { get; private set; }
@@ -17,12 +20,14 @@ namespace HelloWorld
         {
             foreach (var renderer in GetComponentsInChildren<Renderer>()) renderer.enabled = false;
             foreach (var collider in GetComponentsInChildren<Collider>()) collider.enabled = false;
-            if (IsOwner) Local = this;
+            cosmeticPlayers.Add(this);
+            if (IsOwner) { Local = this; CosmeticSkins.Value = DuelSkins.Packed(); }
             if (IsServer) HelloWorldManager.Instance?.RegisterPlayer(this);
         }
 
         public override void OnNetworkDespawn()
         {
+            cosmeticPlayers.Remove(this);
             if (Local == this) Local = null;
         }
 
@@ -50,6 +55,9 @@ namespace HelloWorld
                 new DuelChatLine{Sequence=sequence,Sender=sender,Name=name,Message=message});
         }
         [Rpc(SendTo.Owner,InvokePermission=RpcInvokePermission.Server)]
+        public void ShowChatEntryNoticeRpc()
+        {if(IsOwner)HelloWorldManager.Instance?.GetComponent<DuelChat>()?.AddEntryNotice();}
+        [Rpc(SendTo.Owner,InvokePermission=RpcInvokePermission.Server)]
         public void RejectChatRpc()
         {if(IsOwner)HelloWorldManager.Instance?.GetComponent<DuelChat>()?.Rejected();}
 
@@ -64,6 +72,11 @@ namespace HelloWorld
         {
             if (IsSpawned && IsOwner) RematchRpc(State.Value.Round);
         }
+        public void ToggleHostPractice()
+        {if(IsSpawned&&IsOwner&&Seat.Value==0)ToggleHostPracticeRpc(State.Value.Round);}
+        [Rpc(SendTo.Server,InvokePermission=RpcInvokePermission.Owner)]
+        private void ToggleHostPracticeRpc(int round,RpcParams rpcParams=default)
+        {if(rpcParams.Receive.SenderClientId==OwnerClientId)HelloWorldManager.Instance?.RequestHostPractice(OwnerClientId,round);}
         public void StopClock(double sample)
         { if(IsSpawned && IsOwner) StopClockRpc(State.Value.Round,State.Value.Clock.Iteration,sample); }
         public void StopDice()
@@ -95,9 +108,14 @@ namespace HelloWorld
         public void ReportClockStopRpc(int round,int iteration,bool accepted,int record,MiniFailure failure)
         { if(IsOwner) HelloWorldManager.Instance?.GetComponent<RouletteView>()?.ReportClockStop(round,iteration,accepted,record,failure); }
         public void UseItem(DuelItem item)
-        {if(IsSpawned&&IsOwner)UseItemRpc(item,State.Value.Round,State.Value.Clock.Iteration);}
+        {if(IsSpawned&&IsOwner&&Seat.Value>=0)UseItemRpc(item,State.Value.Round,State.Value.Clock.Iteration,State.Value.ForSeat(Seat.Value).PracticeSession);}
         public void SelectLoadoutItem(DuelItem item)
         {if(IsSpawned&&IsOwner)SelectLoadoutItemRpc(item,State.Value.Round);}
+        public void PreviewEquipment(int item)
+        {if(IsSpawned&&IsOwner&&Seat.Value>=0){var s=State.Value;var a=s.ForSeat(Seat.Value);PreviewEquipmentRpc(item,s.Round,s.Clock.Iteration,a.Life,a.QuickItemVersion);}}
+        [Rpc(SendTo.Server,InvokePermission=RpcInvokePermission.Owner)]
+        private void PreviewEquipmentRpc(int item,int round,int iteration,int life,int version,RpcParams rpcParams=default)
+        {if(rpcParams.Receive.SenderClientId==OwnerClientId)HelloWorldManager.Instance?.RequestPreviewEquipment(OwnerClientId,item,round,iteration,life,version);}
         [Rpc(SendTo.Server,InvokePermission=RpcInvokePermission.Owner)]
         private void SelectLoadoutItemRpc(DuelItem item,int round,RpcParams rpcParams=default)
         {
@@ -105,8 +123,8 @@ namespace HelloWorld
             HelloWorldManager.Instance?.RequestLoadoutItem(OwnerClientId,item,round);
         }
         [Rpc(SendTo.Server,InvokePermission=RpcInvokePermission.Owner)]
-        private void UseItemRpc(DuelItem item,int round,int iteration,RpcParams rpcParams=default)
-        {if(rpcParams.Receive.SenderClientId!=OwnerClientId)return;HelloWorldManager.Instance?.RequestItem(OwnerClientId,item,round,iteration);}
+        private void UseItemRpc(DuelItem item,int round,int iteration,int practiceSession,RpcParams rpcParams=default)
+        {if(rpcParams.Receive.SenderClientId!=OwnerClientId)return;HelloWorldManager.Instance?.RequestItem(OwnerClientId,item,round,iteration,practiceSession);}
         public void Look(float yaw,float pitch,bool ads)
         { if (IsSpawned && IsOwner) LookRpc(yaw,pitch,ads,State.Value.Round); }
         public void ThrowInk(float yaw,float pitch,double sample)

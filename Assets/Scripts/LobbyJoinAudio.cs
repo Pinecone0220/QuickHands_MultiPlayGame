@@ -43,7 +43,7 @@ namespace HelloWorld
         private void Play(AudioClip clip)
         {
             if(clip==null)return;
-            source.clip=clip;
+            source.clip=clip;source.volume=.55f*DuelSettings.Effects;
             source.Play();
         }
         private void Detach()

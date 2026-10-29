@@ -22,7 +22,7 @@ namespace HelloWorld
         private readonly List<DuelChatLine> lines=new List<DuelChatLine>();
         private readonly List<Label> labels=new List<Label>();
         private Keyboard keyboard,imeKeyboard;
-        private bool open,hadSession,composing,awaitingEcho,pendingSubmit,inputFocused;
+        private bool open,hadSession,noticeShown,composing,awaitingEcho,pendingSubmit,inputFocused;
         private int submitFrame=-1,compositionEndedFrame=-1,pointerClosedFrame=-1,lastEditFrame=-1;
         private double lastSend=-10,hintUntil,lastEditAt;
         private string submitted="",draft="";
@@ -62,6 +62,7 @@ namespace HelloWorld
                 if(hadSession)ClearRoom();hadSession=false;layer.style.display=DisplayStyle.None;return;
             }
             hadSession=true;layer.style.display=DisplayStyle.Flex;
+            if(DuelSettings.WindowOpen)return;
             if(open&&keyboard!=null&&keyboard.escapeKey.wasPressedThisFrame)Close();
             else if(inputFrame!=Time.frameCount&&keyboard!=null&&
                 (keyboard.enterKey.wasPressedThisFrame||keyboard.numpadEnterKey.wasPressedThisFrame))
@@ -73,10 +74,10 @@ namespace HelloWorld
             if(open&&Mouse.current!=null&&(Mouse.current.leftButton.wasPressedThisFrame||Mouse.current.rightButton.wasPressedThisFrame||Mouse.current.middleButton.wasPressedThisFrame))
             {
                 var mouse=Mouse.current.position.ReadValue();mouse.y=Screen.height-mouse.y;
-                if(!DuelPointer.AltHeld||!panel.worldBound.Contains(RuntimePanelUtils.ScreenToPanel(root.panel,mouse)))
+                if(!DuelPointer.UiMode||!panel.worldBound.Contains(RuntimePanelUtils.ScreenToPanel(root.panel,mouse)))
                 {Close();pointerClosedFrame=Time.frameCount;}
             }
-            if(open&&DuelPointer.AltHeld&&Mouse.current!=null)
+            if(open&&DuelPointer.UiMode&&Mouse.current!=null)
             {
                 var mouse=Mouse.current.position.ReadValue();mouse.y=Screen.height-mouse.y;
                 float wheel=Mouse.current.scroll.ReadValue().y;
@@ -168,7 +169,7 @@ namespace HelloWorld
         }
         private static bool Inside(VisualElement parent,VisualElement child)=>parent==child||parent.Contains(child);
         private void OnWheel(WheelEvent e)
-        {if(open&&(!DuelPointer.AltHeld||!Inside(history,e.target as VisualElement)))e.StopImmediatePropagation();}
+        {if(open&&(!DuelPointer.UiMode||!Inside(history,e.target as VisualElement)))e.StopImmediatePropagation();}
         public void Open()
         {
             if(!Available)return;
@@ -228,14 +229,27 @@ namespace HelloWorld
             awaitingEcho=false;Hint("전송되지 않았습니다. 잠시 후 다시 보내세요.");
         }
         private void Hint(string text){hint.text=text;hintUntil=Time.realtimeSinceStartupAsDouble+3;}
+        public void AddEntryNotice()
+        {
+            if(noticeShown)return;noticeShown=true;
+            const string message="Alt를 눌러 마우스를 조작할 수 있습니다.\n마우스 휠이나 숫자키로 아이템과 무기를 교체할 수 있습니다.";
+            lines.Add(new DuelChatLine{Sequence=0,Message=new Unity.Collections.FixedString512Bytes(message)});
+            var label=new Label("[공지] "+message){enableRichText=false,pickingMode=open?PickingMode.Position:PickingMode.Ignore};
+            label.AddToClassList("chat-row");label.AddToClassList("chat-notice");
+            labels.Add(label);history.contentContainer.Add(label);empty.style.display=DisplayStyle.None;
+            if(lines.Count>DuelChatLog.MaxLines){lines.RemoveAt(0);labels[0].RemoveFromHierarchy();labels.RemoveAt(0);}
+            Bottom();
+        }
         public void Receive(DuelChatLine line)
         {
             if(line.Sequence<=0)return;
             int index=lines.FindIndex(x=>x.Sequence>=line.Sequence);
             if(index>=0&&lines[index].Sequence==line.Sequence)return;
-            if(lines.Count>=DuelChatLog.MaxLines&&line.Sequence<lines[0].Sequence)return;
+            int oldest=lines.FindIndex(x=>x.Sequence>0);
+            if(lines.Count>=DuelChatLog.MaxLines&&oldest>=0&&line.Sequence<lines[oldest].Sequence)return;
             // Late history may arrive after a live message; never float an older record again.
-            if(lines.Count==0||line.Sequence>lines[lines.Count-1].Sequence)PushSpeech(line);
+            int newest=0;foreach(var previous in lines)if(previous.Sequence>newest)newest=previous.Sequence;
+            if(line.Sequence>newest)PushSpeech(line);
             bool bottom=!open||history.verticalScroller.highValue-history.verticalScroller.value<5;
             if(index<0)index=lines.Count;
             lines.Insert(index,line);
@@ -247,7 +261,8 @@ namespace HelloWorld
             labels.Insert(index,label);history.contentContainer.Insert(index,label);empty.style.display=DisplayStyle.None;
             if(lines.Count>DuelChatLog.MaxLines)
             {
-                float removed=labels[0].layout.height;lines.RemoveAt(0);labels[0].RemoveFromHierarchy();labels.RemoveAt(0);
+                int remove=lines[0].Sequence==0?1:0;
+                float removed=labels[remove].layout.height;lines.RemoveAt(remove);labels[remove].RemoveFromHierarchy();labels.RemoveAt(remove);
                 if(!bottom)history.scrollOffset=new Vector2(0,Mathf.Max(0,history.scrollOffset.y-removed));
             }
             if(bottom)Bottom();
@@ -256,6 +271,7 @@ namespace HelloWorld
         {history.schedule.Execute(()=>{if(labels.Count>0)history.ScrollTo(labels[labels.Count-1]);});}
         public void ClearRoom()
         {
+            hadSession=noticeShown=false;
             Close();lines.Clear();labels.Clear();history.Clear();history.Add(empty);empty.style.display=DisplayStyle.Flex;
             ClearSpeech();
             draft="";submitted="";awaitingEcho=false;lastSend=-10;hintUntil=0;composing=false;

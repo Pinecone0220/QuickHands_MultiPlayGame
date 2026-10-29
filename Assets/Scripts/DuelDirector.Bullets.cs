@@ -6,14 +6,17 @@ namespace HelloWorld
         private int clockShotsRemaining=1;
         private bool UseBullet(int seat,int iteration,double now)
         {
+            bool preparing=clock.State.Phase==ClockPhase.ItemPreparation&&now<clock.State.StartedAt;
+            bool shooting=clock.State.Phase==ClockPhase.Shooting&&!shotOpportunitySpent&&clockShotsRemaining>0&&
+                (ShotLimitFor(seat)<=0||now<DuelClockContest.ShootingStartsAt(clock.State)+ShotLimitFor(seat));
             if(seat<0||seat>=actions.Length||Stage!=DuelStage.Racing||Game.Phase!=DuelPhase.Playing||
-                clock.State.Phase!=ClockPhase.ItemPreparation||clock.State.MiniGame==PartyMiniGame.QuickHands||
-                iteration!=clock.State.Iteration||now>=clock.State.StartedAt||clock.State.First!=seat||
+                (!preparing&&!shooting)||clock.State.MiniGame==PartyMiniGame.QuickHands||
+                iteration!=clock.State.Iteration||clock.State.First!=seat||
                 !RouletteRules.Has(Game.AliveMask,seat)||actions[seat].DiedAt>=0||actions[seat].Stunned)return false;
             var a=actions[seat];if(a.BulletItems<=0||a.BulletUsed)return false;
             // Pay on activation; misses, unused extra shots and turn expiry never refund it.
-            if(!Game.UnlimitedItems)a.BulletItems--;
-            a.BulletUsed=true;actions[seat]=a;Sequence++;return true;
+            if(!UnlimitedFor(seat))a.BulletItems--;
+            a.BulletUsed=true;if(shooting)clockShotsRemaining++;actions[seat]=a;Sequence++;return true;
         }
         private void ResetBulletTurn()
         {

@@ -60,8 +60,9 @@ namespace HelloWorld
         {
             double cycle=c.Time/18+c.Seat*.09;int step=(int)System.Math.Floor(cycle);float fraction=(float)(cycle-step);
             float change=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.76f,1,fraction));float time=(float)(c.Time%10000)+c.Seat*1.7f;
-            var p=Blend(Idle((c.Seat+step)%6,time),Idle((c.Seat+step+1)%6,time),change);
-            if(c.Combat&&!c.Active&&!c.Winner)p=Idle(3,time);
+            // During combat use a steady base pose; action, recoil and shock
+            // below still animate normally.
+            var p=c.Combat?Idle(3,0):Blend(Idle((c.Seat+step)%6,time),Idle((c.Seat+step+1)%6,time),change);
             if(c.DrinkAction!=DuelDrinkAction.None&&!c.Active&&!c.Combat)
             {
                 float t=c.DrinkProgress,weight=DrinkWeight(t);
@@ -85,7 +86,7 @@ namespace HelloWorld
                     if(c.Action==DuelAction.Load){p.Lean=-9;p.Roll=-1.3f;}
                     if(c.Action==DuelAction.CloseBarrel){p.Lean=-7;p.Roll=.8f;}
                 }
-                p.Support=c.GunReady&&(c.Weapon==DuelWeapon.SawedOff||c.Weapon==DuelWeapon.BAS||c.Aiming)?1:0;p.LeftCurl=p.Support*30;p.Lean+=c.Recoil*3;
+                p.Support=c.Weapon==DuelWeapon.BAS?1:c.GunReady&&(c.Weapon==DuelWeapon.SawedOff||c.Aiming)?1:0;p.LeftCurl=p.Support*30;p.Lean+=c.Recoil*3;
             }
             if(c.Ink)
             {

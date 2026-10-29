@@ -1,8 +1,15 @@
 .duel-root { flex-grow: 1; color: rgb(225, 223, 205); font-size: 16px; background-color: rgba(0, 0, 0, 0); }
+.bot-controls { position: absolute; left: 18px; top: 18px; width: 250px; padding: 10px; background-color: rgba(9, 15, 16, 0.95); border-width: 1px; border-color: rgb(96, 111, 92); }
+.bot-controls-title { color: rgb(219, 202, 160); font-size: 14px; -unity-font-style: bold; margin-bottom: 5px; }
+.bot-controls-row { flex-direction: row; }
+.bot-level, .bot-action { flex-grow: 1; height: 34px; margin: 2px; padding: 0 4px; font-size: 13px; color: rgb(225, 223, 205); background-color: rgb(27, 40, 35); border-width: 1px; border-color: rgb(96, 111, 92); }
+.bot-level.selected { color: rgb(255, 231, 171); background-color: rgb(77, 67, 40); border-color: rgb(221, 184, 95); }
+.bot-level:disabled, .bot-action:disabled { opacity: 0.4; }
 .quick-start-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; align-items: center; justify-content: center; }
 .mini-game-name { position: absolute; top: 14px; left: 50%; translate: -50% 0; max-width: 80%; padding: 8px 24px; border-top-width: 1px; border-bottom-width: 1px; border-color: rgb(170, 142, 79); border-radius: 3px; background-color: rgba(9, 15, 16, 0.9); color: rgb(240, 224, 172); font-size: 18px; -unity-font-style: bold; -unity-text-align: middle-center; white-space: nowrap; }
 .hover-tip { position: absolute; width: 280px; max-width: 90%; padding: 10px 12px; background-color: rgba(8, 15, 16, 0.98); border-width: 1px; border-color: rgb(174, 145, 83); border-radius: 4px; }
 .hover-tip-title { font-size: 16px; -unity-font-style: bold; color: rgb(238, 214, 155); margin-bottom: 5px; white-space: normal; }
+.hover-tip-detail { font-size: 12px; color: rgb(238, 214, 155); margin-top: -3px; margin-bottom: 5px; white-space: normal; }
 .hover-tip-body { font-size: 14px; color: rgb(217, 222, 210); white-space: normal; }
 .manual-selection { position: absolute; left: 32%; right: 32%; top: 27%; padding: 22px; background-color: rgba(9, 15, 16, 0.97); border-width: 1px; border-color: rgb(174, 145, 83); border-radius: 5px; }
 .manual-selection Button { height: 48px; margin-bottom: 10px; }
@@ -10,6 +17,9 @@
 .item-row { flex-wrap: wrap; }
 .ink-live-items { position: absolute; right: 24px; bottom: 266px; width: 190px; }
 .ink-live-items .item-choice { width: 180px; height: 90px; }
+.practice-items { position: absolute; right: 24px; bottom: 255px; flex-direction: row; justify-content: flex-end; }
+.practice-items .item-choice { width: 96px; height: 80px; margin-left: 4px; margin-right: 0; }
+.practice-items .item-icon { width: 42px; height: 42px; }
 .ink-effect { position: absolute; left: 0; right: 0; top: 0; bottom: 0; -unity-background-scale-mode: stretch-to-fill; }
 .item-choice { width: 180px; height: 138px; align-items: center; justify-content: center; margin-left: 6px; margin-right: 6px; padding: 6px; background-color: rgb(27, 40, 35); border-width: 1px; border-color: rgb(133, 129, 89); border-radius: 4px; }
 .item-choice:disabled { opacity: 0.35; }
@@ -34,6 +44,7 @@
 .room-settings .unity-base-field__label { min-width: 110px; }
 .room-settings .unity-base-text-field__input { background-color: rgb(13, 20, 18); color: rgb(235, 236, 223); padding: 7px; border-width: 1px; border-color: rgb(62, 75, 65); }
 .room-settings-note, .room-shot-summary { font-size: 12px; color: rgb(165, 176, 166); white-space: normal; }
+.developer-gold-settings { margin-top: 12px; padding-top: 10px; border-top-width: 1px; border-top-color: rgb(90, 100, 80); }
 .room-shot-summary { -unity-text-align: middle-center; margin-top: 8px; }
 .shot-time-remaining { position: absolute; bottom: 96px; left: 35%; right: 35%; padding: 8px; font-size: 18px; -unity-text-align: middle-center; color: rgb(228, 205, 148); background-color: rgba(9, 15, 16, 0.86); }
 .clock-panel { position: absolute; left: 22%; right: 22%; bottom: 90px; padding: 16px; background-color: rgba(9, 15, 16, 0.93); border-top-width: 1px; border-top-color: rgb(174, 145, 83); align-items: stretch; }
@@ -57,6 +68,8 @@
 .party-selection-title { font-size: 18px; -unity-text-align: middle-center; margin-bottom: 16px; }
 .party-reel-window { height: 180px; overflow: hidden; background-color: rgb(15, 24, 24); }
 .party-reel { position: absolute; left: 0; right: 0; top: 0; }
+.party-reel-row { position: relative; height: 60px; min-height: 60px; flex-shrink: 0; }
+.party-reel-strike { position: absolute; left: 20%; right: 20%; top: 50%; height: 2px; background-color: rgb(219, 202, 160); }
 .party-reel-label { height: 60px; min-height: 60px; margin: 0; padding: 0; flex-shrink: 0; font-size: 28px; -unity-font-style: bold; -unity-text-align: middle-center; color: rgb(219, 202, 160); }
 .party-reel-focus { position: absolute; left: 0; right: 0; top: 60px; height: 60px; border-top-width: 1px; border-bottom-width: 1px; border-color: rgb(215, 179, 92); background-color: rgba(184, 142, 52, 0.09); }
 .party-selection-layer.selected .party-selector { border-color: rgb(238, 199, 113); }
@@ -64,14 +77,15 @@
 .menu-panel { padding: 26px; flex-shrink: 0; }
 .menu-panel > * { flex-shrink: 0; }
 .chat-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
-.chat-panel { position: absolute; left: 14px; bottom: 14px; width: 340px; max-width: 65%; height: 150px; max-height: 48%; padding: 10px; background-color: rgba(8, 15, 15, 0.75); border-left-width: 2px; border-left-color: rgb(137, 115, 68); border-radius: 3px; }
-.chat-panel.chat-active { width: 420px; height: 320px; background-color: rgba(8, 15, 15, 0.96); border-left-color: rgb(224, 192, 113); }
-.chat-title { font-size: 13px; color: rgb(205, 185, 132); margin-bottom: 4px; flex-shrink: 0; }
+.chat-panel { position: absolute; left: 14px; bottom: 14px; width: 380px; max-width: 65%; height: 175px; max-height: 55%; padding: 10px; background-color: rgba(8, 15, 15, 0.75); border-left-width: 2px; border-left-color: rgb(137, 115, 68); border-radius: 3px; }
+.chat-panel.chat-active { width: 470px; height: 360px; background-color: rgba(8, 15, 15, 0.96); border-left-color: rgb(224, 192, 113); }
+.chat-title { font-size: 15px; color: rgb(205, 185, 132); margin-bottom: 4px; flex-shrink: 0; }
 .chat-log { flex-grow: 1; flex-shrink: 1; min-height: 0; }
-.chat-row { font-size: 13px; color: rgb(211, 220, 210); white-space: normal; margin-bottom: 5px; flex-shrink: 0; }
+.chat-row { font-size: 15px; color: rgb(211, 220, 210); white-space: normal; margin-bottom: 5px; flex-shrink: 0; }
 .chat-own { color: rgb(240, 221, 166); }
-.chat-input { height: 36px; min-height: 36px; margin-top: 6px; margin-bottom: 2px; flex-shrink: 0; }
-.chat-hint { font-size: 11px; color: rgb(157, 169, 154); white-space: normal; margin-top: 3px; flex-shrink: 0; }
+.chat-notice { color: rgb(245, 207, 95); }
+.chat-input { height: 38px; min-height: 38px; font-size: 15px; margin-top: 6px; margin-bottom: 2px; flex-shrink: 0; }
+.chat-hint { font-size: 13px; color: rgb(157, 169, 154); white-space: normal; margin-top: 3px; flex-shrink: 0; }
 .wordmark { color: rgb(195, 170, 112); font-size: 15px; letter-spacing: 3px; margin-bottom: 20px; }
 .title { font-size: 34px; -unity-font-style: bold; white-space: normal; margin-bottom: 16px; }
 .description { color: rgb(175, 184, 178); font-size: 14px; white-space: normal; margin-bottom: 20px; }
@@ -98,6 +112,7 @@ TextField { margin-bottom: 8px; }
 .small { color: rgb(160, 173, 160); font-size: 11px; letter-spacing: 1px; }
 .scene-space { flex-grow: 1; min-height: 80px; }
 .hud-bottom { align-self: center; width: 100%; max-width: 720px; background-color: rgba(9, 15, 16, 0.89); padding: 8px 14px; margin-bottom: 28px; border-top-width: 1px; border-top-color: rgb(93, 86, 60); }
+.relay-code-button { position: absolute; top: 75px; left: 50%; translate: -50% 0; width: 260px; max-width: 70%; height: 44px; }
 .turn { margin-top: 2px; margin-bottom: 2px; font-size: 20px; -unity-font-style: bold; -unity-text-align: middle-center; white-space: normal; }
 .ammo { color: rgb(213, 188, 132); font-size: 16px; -unity-text-align: middle-center; margin: 5px; }
 .result { margin-top: 3px; color: rgb(155, 171, 158); font-size: 12px; -unity-text-align: middle-center; white-space: normal; margin-bottom: 7px; }
@@ -116,7 +131,8 @@ Button.quit-game { position: absolute; bottom: 76px; right: 20px; min-width: 190
 .local-health-title { font-size: 16px; color: rgb(215, 221, 202); }
 .local-weapon-icon { width: 96px; height: 42px; flex-shrink: 0; }
 .local-health { font-size: 28px; -unity-font-style: bold; color: rgb(240, 224, 172); -unity-text-align: middle-center; }
-.practice-cancel { position: absolute; bottom: 20px; left: 50%; translate: -50% 0; min-width: 140px; }
+.practice-controls { position: absolute; left: 18px; top: 160px; width: 180px; }
+.practice-cancel, .host-practice-start { width: 100%; margin-left: 0; margin-right: 0; }
 .damage-overlay { position: absolute; top: 0; bottom: 0; left: 0; right: 0; background-color: rgba(0, 0, 0, 0); -unity-background-scale-mode: stretch-to-fill; opacity: 0; }
 .aim-warning { position: absolute; top: 0; bottom: 0; left: 0; right: 0; -unity-background-scale-mode: stretch-to-fill; }
 .qte-digits { flex-direction: row; justify-content: center; margin-top: 6px; margin-bottom: 6px; }
@@ -175,7 +191,7 @@ Button.target-button { height: 26px; font-size: 12px; background-color: rgb(29, 
 .results-cell { width: 14.8%; margin: 0; padding: 3px 2px; -unity-text-align: middle-center; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .results-cell.results-player { width: 26%; -unity-text-align: middle-left; }
 .results-winner { color: rgb(247, 219, 143); background-color: rgba(84, 71, 36, 0.45); }
-.results-footer { margin-top: 8px; flex-shrink: 0; }
+.results-footer { margin-top: 8px; flex-shrink: 0; overflow: hidden; }
 .results-ready { font-size: 12px; -unity-text-align: middle-center; color: rgb(177, 196, 174); }
 .round-results .weapon-choice-button { height: 70px; }
 .round-results .weapon-choice-icon { height: 28px; }
@@ -234,3 +250,97 @@ Button.weapon-choice-button { height: 80px; flex-direction: column; align-items:
 .life-counter-number { height: 72px; min-height: 72px; flex-shrink: 0; margin: 0; padding: 0; font-size: 60px; color: rgb(235, 219, 170); -unity-font-style: bold; -unity-text-align: middle-center; }
 .shooter-announcement-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; align-items: center; justify-content: center; }
 .shooter-announcement { max-width: 90%; padding: 16px 28px; font-size: 34px; -unity-font-style: bold; -unity-text-align: middle-center; white-space: normal; color: rgb(240, 224, 172); background-color: rgba(9, 15, 16, 0.9); border-top-width: 2px; border-top-color: rgb(170, 142, 79); border-bottom-width: 2px; border-bottom-color: rgb(170, 142, 79); border-radius: 3px; }
+
+.patch-notes-panel { width: 720px; max-width: 92%; max-height: 86%; padding: 20px; background-color: rgb(10,17,17); border-width: 1px; border-color: rgb(141,117,61); border-radius: 5px; }
+.patch-notes-scroll { max-height: 520px; flex-shrink: 1; }
+.patch-notes-footer { margin-top: 12px; padding-top: 8px; border-top-width: 1px; border-top-color: rgb(62,75,65); align-items: flex-end; flex-shrink: 0; }
+.patch-notes-footer Toggle { color: rgb(211,220,195); }
+.patch-note-date { margin-top: 12px; margin-bottom: 12px; font-size: 18px; color: rgb(215,189,121); -unity-font-style: bold; }
+.patch-note-card { margin-bottom: 10px; padding: 14px; background-color: rgb(20,29,27); border-left-width: 2px; border-left-color: rgb(141,117,61); }
+.patch-note-text { font-size: 15px; color: rgb(221,225,212); white-space: normal; }
+
+.gacha-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(4, 9, 10, 0.97); align-items: center; justify-content: center; }
+.gacha-panel { width: 94%; height: 92%; max-width: 1400px; background-color: rgb(10, 17, 17); border-width: 1px; border-color: rgb(165, 130, 62); padding: 22px; }
+.gacha-head { flex-direction: row; justify-content: space-between; align-items: center; height: 55px; }
+.gacha-title { font-size: 28px; color: rgb(234, 213, 159); -unity-font-style: bold; }
+.gacha-body { flex-direction: row; flex-grow: 1; min-height: 0; }
+.gacha-left { width: 60%; align-items: center; justify-content: center; }
+.gacha-right { width: 40%; padding: 18px; min-height: 0; }
+.gacha-controls { margin-bottom: 12px; }
+.gacha-gold-row { flex-direction: row; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.gacha-gold-icon { width: 28px; height: 28px; margin-right: 7px; }
+.gacha-gold { color: rgb(234, 213, 159); font-size: 18px; -unity-font-style: bold; }
+.gacha-credit-icon { width: 28px; height: 28px; margin-left: 18px; margin-right: 7px; }
+.gacha-credit { color: rgb(186, 209, 213); font-size: 16px; -unity-font-style: bold; }
+.credit-exchange-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(4, 9, 10, 0.97); align-items: center; justify-content: center; }
+.credit-exchange-panel { width: 94%; height: 92%; max-width: 1400px; padding: 22px; background-color: rgb(10, 17, 17); border-width: 1px; border-color: rgb(165, 130, 62); }
+.gacha-wheel-frame { width: 500px; height: 500px; max-width: 100%; max-height: 75%; align-items: center; justify-content: center; }
+.gacha-wheel { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-size: contain; }
+.gacha-wheel-label { position: absolute; width: 62px; height: 22px; margin-left: -31px; margin-top: -11px; -unity-text-align: middle-center; -unity-font-style: bold; font-size: 13px; }
+.gacha-pointer { position: absolute; top: -10px; left: 45%; width: 10%; -unity-text-align: middle-center; color: rgb(255, 229, 172); font-size: 32px; }
+.gacha-result { margin-top: 22px; color: rgb(226, 220, 198); font-size: 19px; -unity-text-align: middle-center; white-space: normal; }
+.gacha-details { flex-grow: 1; min-height: 0; padding: 12px; border-width: 1px; border-color: rgb(83, 96, 83); background-color: rgb(14, 23, 22); }
+.gacha-detail-title { font-size: 19px; color: rgb(230, 207, 151); -unity-font-style: bold; margin-bottom: 12px; }
+.gacha-description { color: rgb(205, 211, 198); font-size: 15px; white-space: normal; }
+.gacha-list { flex-grow: 1; min-height: 0; }
+.gacha-item-heading { color: rgb(225, 215, 182); font-size: 17px; margin-top: 10px; margin-bottom: 5px; -unity-font-style: bold; }
+.skin-inventory-heading { margin-top: 8px; margin-bottom: 4px; -unity-text-align: middle-left; color: rgb(225, 215, 182); }
+.skin-inventory-items { margin-left: 12px; margin-bottom: 4px; }
+.gacha-product { margin: 3px; font-size: 14px; }
+.gacha-product-row { flex-direction: row; align-items: center; }
+.gacha-product-row .secondary { flex-grow: 1; }
+.gacha-product-icon { width: 42px; height: 42px; margin-right: 8px; }
+.menu-panel > Button.menu-extra-action { margin-top: 16px; }
+.gacha-right.inventory-only { width: 100%; max-width: 850px; margin-left: auto; margin-right: auto; }
+.gacha-right.inventory-only { flex-direction: row; align-items: stretch; }
+.gacha-right.inventory-only .gacha-details { flex-grow: 1; min-width: 0; }
+.skin-hover-panel { width: 42%; margin-left: 14px; align-items: center; justify-content: center; border-width: 1px; border-color: rgb(137, 112, 60); background-color: rgb(15, 23, 22); }
+.skin-preview-name { color: rgb(234, 213, 159); font-size: 18px; -unity-font-style: bold; -unity-text-align: middle-center; white-space: normal; }
+.skin-preview-image { width: 100%; height: 300px; }
+.skin-award-overlay { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.88); align-items: center; justify-content: center; }
+.skin-award-card { width: 480px; max-width: 90%; padding: 22px; align-items: center; border-width: 1px; border-color: rgb(205, 170, 90); background-color: rgb(12, 19, 18); }
+.skin-award-name { font-size: 23px; -unity-font-style: bold; -unity-text-align: middle-center; white-space: normal; }
+.skin-award-image { width: 340px; height: 340px; max-width: 90%; }
+.skin-award-image.batch-preview { height: 180px; }
+.gacha-batch-results { width: 100%; height: 250px; margin-top: 8px; margin-bottom: 8px; }
+.gacha-result-entry { min-height: 32px; margin: 2px; -unity-text-align: middle-left; font-size: 14px; background-color: rgb(24, 34, 32); }
+.skin-award-hint { color: rgb(170, 180, 168); font-size: 14px; -unity-text-align: middle-center; }
+.skin-award-halo { position: absolute; width: 520px; height: 520px; max-width: 82%; max-height: 82%; border-width: 5px; border-radius: 260px; }
+.skin-award-flash { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.skin-award-spark { position: absolute; width: 34px; height: 34px; margin-left: -17px; margin-top: -17px; -unity-text-align: middle-center; -unity-font-style: bold; }
+.gacha-controls { flex-shrink: 0; }
+.gacha-details { flex-shrink: 1; overflow: hidden; }
+.gacha-probability { color: rgb(180, 190, 177); font-size: 13px; margin-bottom: 8px; white-space: normal; }
+.gacha-3d-image { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.settings-button { position: absolute; top: 12px; right: 12px; width: 88px; height: 40px; margin: 0; }
+.gold-display { position: absolute; top: 12px; right: 110px; height: 40px; min-width: 110px; padding-left: 8px; padding-right: 10px; flex-direction: row; align-items: center; justify-content: flex-end; background-color: rgba(15, 23, 21, 0.94); border-width: 1px; border-color: rgb(112, 96, 59); }
+.gold-display-icon { width: 28px; height: 28px; margin-right: 7px; }
+.gold-display-amount { color: rgb(235, 215, 163); font-size: 16px; -unity-font-style: bold; }
+.settings-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.78); align-items: center; justify-content: center; }
+.settings-panel { width: 480px; max-width: 90%; padding: 22px; background-color: rgb(12, 20, 19); border-width: 1px; border-color: rgb(183, 151, 83); }
+.settings-header { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.settings-title { font-size: 25px; color: rgb(235, 216, 168); -unity-font-style: bold; }
+.settings-control { margin-top: 10px; margin-bottom: 10px; }
+.settings-control-heading { flex-direction: row; align-items: center; justify-content: space-between; }
+.settings-label { font-size: 17px; color: rgb(222, 225, 210); -unity-font-style: bold; }
+.settings-value { font-size: 16px; color: rgb(219, 187, 110); }
+.settings-slider { margin-top: 8px; }
+.settings-hint { margin-top: 12px; color: rgb(148, 161, 149); font-size: 13px; }
+.attendance-settings-button { margin-top: 16px; }
+.attendance-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.8); align-items: center; justify-content: center; }
+.attendance-panel { width: 590px; max-width: 92%; padding: 22px; background-color: rgb(12, 20, 19); border-width: 1px; border-color: rgb(183, 151, 83); }
+.attendance-description { color: rgb(225, 212, 174); font-size: 16px; margin-bottom: 12px; }
+.attendance-days { margin-bottom: 12px; }
+.attendance-week { flex-direction: row; }
+.attendance-weekday { flex-grow: 1; flex-basis: 0; height: 26px; -unity-text-align: middle-center; color: rgb(173, 180, 159); }
+.attendance-empty { flex-grow: 1; flex-basis: 0; margin: 2px; }
+.attendance-day { flex-grow: 1; flex-basis: 0; height: 58px; margin: 2px; padding: 4px; background-color: rgb(24, 35, 32); border-width: 1px; border-color: rgb(66, 79, 69); }
+.attendance-day.today { border-color: rgb(226, 179, 79); }
+.attendance-day.claimed { background-color: rgb(58, 65, 39); }
+.attendance-day-number { color: rgb(224, 225, 210); font-size: 14px; -unity-font-style: bold; }
+.attendance-day-header { flex-direction: row; justify-content: space-between; align-items: center; }
+.attendance-day-claimed { color: rgb(180, 193, 155); font-size: 10px; }
+.attendance-day-reward { flex-direction: row; justify-content: center; align-items: center; flex-grow: 1; }
+.attendance-gold-icon { width: 19px; height: 19px; margin-right: 2px; }
+.attendance-day-state { color: rgb(235, 205, 124); font-size: 12px; -unity-text-align: middle-center; }
+.attendance-status { color: rgb(204, 213, 195); font-size: 14px; margin-bottom: 9px; -unity-text-align: middle-center; }

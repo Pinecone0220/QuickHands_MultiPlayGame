@@ -22,7 +22,7 @@ public sealed class LanReliabilityRuntimeQA:MonoBehaviour
         var args=Environment.GetCommandLineArgs();int i=Array.IndexOf(args,"--lan-reliability-qa");if(i<0)return;var q=new GameObject("LAN reliability QA").AddComponent<LanReliabilityRuntimeQA>();q.role=args[i+1];q.path=args[Array.IndexOf(args,"--lan-reliability-dir")+1];Directory.CreateDirectory(q.path);q.deadline=Time.realtimeSinceStartupAsDouble+160;Application.targetFrameRate=45;Application.runInBackground=true;
     }
     void Update(){if(Time.realtimeSinceStartupAsDouble>deadline)Done("FAIL LAN reliability timeout "+role,1);}
-    DuelLanRoom Ad(int protocol=55)=>new DuelLanRoom{id=Guid.NewGuid().ToString("N"),title="LAN reliability",code="LANFIX",port=17777,count=1,max=6,protocol=protocol,joinable=true,locked=true};
+    DuelLanRoom Ad(int protocol=DuelLanRooms.Protocol)=>new DuelLanRoom{id=Guid.NewGuid().ToString("N"),title="LAN reliability",code="LANFIX",port=17777,count=1,max=6,protocol=protocol,joinable=true,locked=true};
     IEnumerator Start()
     {
         yield return new WaitForSecondsRealtime(.8f);manager=HelloWorldManager.Instance;view=manager.GetComponent<RouletteView>();

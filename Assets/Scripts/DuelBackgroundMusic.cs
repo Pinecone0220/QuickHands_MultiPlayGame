@@ -5,6 +5,7 @@ namespace HelloWorld
     public sealed class DuelBackgroundMusic : MonoBehaviour
     {
         private AudioSource music;
+        public bool GachaOpen { get; set; }
         private void Awake()
         {
             music=gameObject.AddComponent<AudioSource>();
@@ -17,7 +18,7 @@ namespace HelloWorld
         {
             var player=HelloWorldPlayer.Local;
             bool playing=player!=null&&player.IsSpawned&&player.State.Value.Phase==DuelPhase.Playing;
-            float target=playing?.16f:.28f;
+            float target=(GachaOpen?.14f:playing?.16f:.28f)*DuelSettings.Music;
             music.volume=Mathf.MoveTowards(music.volume,target,Time.unscaledDeltaTime*.13f);
         }
         private void OnDestroy(){if(music!=null)music.Stop();}

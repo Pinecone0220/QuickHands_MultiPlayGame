@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 namespace HelloWorld
 {
     public enum DuelHitPart : byte { None, Head, Body, Legs }
@@ -45,20 +45,27 @@ namespace HelloWorld
             => Sway(seat,DuelWeapon.Revolver,ads,now,started,out yaw,out pitch);
         public static void Sway(int seat,DuelWeapon weapon,bool ads,double now,double started,out float yaw,out float pitch)
         {
+            // Camera, weapon poses, AI and server ballistics share the same steady aim.
             yaw=pitch=0;
-            if(!ads||!WeaponRules.SupportsAds(weapon))return;
-            // Hip fire has spread, but no weapon sway. ADS retains each weapon's full amplitude.
-            float strength=weapon==DuelWeapon.Taser?1.8f*1.75f*.1f:1.8f*(weapon==DuelWeapon.BAS?5f:weapon==DuelWeapon.SawedOff?1.75f:3.5f);
-            yaw=(float)(Math.Sin(now*7.1+seat*1.7)*strength);
-            pitch=(float)(Math.Sin(now*5.3+seat*.9)*strength*.7);
         }
         public const int ShotgunPellets = 37;
-        public const float ProjectileSpeed = 40f, ProjectileRange = 20f;
-        public static float Spread(DuelWeapon weapon,bool ads) => weapon==DuelWeapon.SawedOff?6:ads||weapon==DuelWeapon.Taser?0:WeaponRules.IsPrecision(weapon)?70:10;
-        // Both precision weapons use the same centre-excluding hip-fire annulus.
+        // Neighbouring seats are 4.05m apart; the next seats are about 7m apart.
+        public const float ProjectileSpeed = 40f, ProjectileRange = 20f,TaserRange=5.5f;
+        public static float Spread(DuelWeapon weapon,bool ads) => weapon==DuelWeapon.SawedOff?6:0;
+        // Winchester hip fire uses a wide cone; ADS remains exact.
         public static float PrecisionSpreadRadius(DuelWeapon weapon,bool ads,double sample)
-            =>Spread(weapon,ads)*(float)Math.Sqrt(!ads?.25+.75*sample:sample);
-        public static float ShotRange(DuelWeapon weapon,bool ads)=>ProjectileRange;
+            =>weapon==DuelWeapon.BAS&&!ads?(float)(10*Math.Sqrt(Math.Max(0,Math.Min(1,sample)))):0;
+        public static float ShotRange(DuelWeapon weapon,bool ads)=>weapon==DuelWeapon.Taser?TaserRange:ProjectileRange;
+        public static DuelRayHit TraceHitscan(int actor,int alive,AimVector origin,AimVector direction,DuelTabletopState? props=null)
+        {
+            var hit=TraceFrom(actor,alive,origin,direction,props,true);
+            return hit.Distance<=TaserRange?hit:new DuelRayHit{Seat=-1,Part=DuelHitPart.None,Prop=DuelTableProp.None,Distance=TaserRange};
+        }
+        public static DuelRayHit TraceRifleHitscan(int actor,int alive,AimVector origin,AimVector direction,DuelTabletopState? props=null)
+        {
+            var hit=TraceFrom(actor,alive,origin,direction,props);
+            return hit.Distance<=ProjectileRange?hit:new DuelRayHit{Seat=-1,Part=DuelHitPart.None,Prop=DuelTableProp.None,Distance=ProjectileRange};
+        }
         private static AimVector Unit(AimVector v) => v*(1/(float)Math.Sqrt(AimVector.Dot(v,v)));
         private static uint Mix(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;return x^(x>>16);}
         // The server chooses a new seed per shot; clients reproduce its random circular pattern.
@@ -75,8 +82,8 @@ namespace HelloWorld
         public static AimVector MuzzleOrigin(int seat,DuelWeapon weapon,bool ads,AimVector centre)
         {
             ads&=WeaponRules.SupportsAds(weapon);
-            // Scoped/iron-sight shots follow the actual view ray without parallax or target attraction.
-            if(ads)return Eye(seat)+centre*.08f;
+            // Single bullets follow the view ray in both scoped and normal fire.
+            if(weapon!=DuelWeapon.SawedOff)return Eye(seat)+centre*.08f;
             return RenderMuzzleOrigin(seat,weapon,false,centre);
         }
         public static AimVector RenderMuzzleOrigin(int seat,DuelWeapon weapon,bool ads,AimVector centre)
@@ -141,6 +148,8 @@ namespace HelloWorld
         public static DuelRayHit Trace(int actor,int alive,AimVector direction,DuelTabletopState? props=null)
             => TraceFrom(actor,alive,Eye(actor),direction,props);
         public static DuelRayHit TraceFrom(int actor,int alive,AimVector origin,AimVector direction,DuelTabletopState? props=null)
+            =>TraceFrom(actor,alive,origin,direction,props,false);
+        private static DuelRayHit TraceFrom(int actor,int alive,AimVector origin,AimVector direction,DuelTabletopState? props,bool taser)
         {
             var result=new DuelRayHit{Seat=-1,Part=DuelHitPart.None,Distance=100};
             float obstacle=Table(origin,direction);
@@ -172,10 +181,21 @@ namespace HelloWorld
                     obstacle=Math.Min(obstacle,Box(o,d,new AimVector(-.40f,.60f-SeatedDrop,-.35f),new AimVector(.40f,.72f-SeatedDrop,.35f)));
                 }
                 if(seat==actor||!RouletteRules.Has(alive,seat))continue;
-                Offer(ref result,seat,DuelHitPart.Head,Sphere(origin,direction,Point(seat,DuelHitPart.Head),.205f));
-                Offer(ref result,seat,DuelHitPart.Body,Box(o,d,new AimVector(-.30f,.78f-SeatedDrop,-.20f),new AimVector(.30f,1.66f-SeatedDrop,.23f)));
+                Offer(ref result,seat,DuelHitPart.Head,Sphere(origin,direction,Point(seat,DuelHitPart.Head),taser?.25f:.205f));
+                float bodyWidth=taser?.35f:.30f;
+                Offer(ref result,seat,DuelHitPart.Body,Box(o,d,new AimVector(-bodyWidth,.78f-SeatedDrop,-.20f),new AimVector(bodyWidth,1.66f-SeatedDrop,.23f)));
+                if(taser)
+                    foreach(float side in new[]{-1f,1f})
+                    {
+                        // A forgiving envelope covers the seated upper arm, forearm and hand.
+                        float x1=side<0?-.68f:.22f,x2=side<0?-.22f:.68f;
+                        Offer(ref result,seat,DuelHitPart.Body,Box(o,d,new AimVector(x1,.35f,-.26f),new AimVector(x2,1.75f,.82f)));
+                    }
                 foreach(float x in new[]{-.22f,.22f})
-                    Offer(ref result,seat,DuelHitPart.Legs,Box(o,d,new AimVector(x-.12f,.10f,-.10f),new AimVector(x+.12f,.78f-SeatedDrop,.48f)));
+                {
+                    float width=taser?.18f:.12f;
+                    Offer(ref result,seat,DuelHitPart.Legs,Box(o,d,new AimVector(x-width,taser?0:.10f,taser?-.18f:-.10f),new AimVector(x+width,.78f-SeatedDrop,taser?.62f:.48f)));
+                }
             }
             if(obstacle<result.Distance-.001f)return new DuelRayHit{Seat=-1,Part=DuelHitPart.None,Distance=obstacle};
             return result;

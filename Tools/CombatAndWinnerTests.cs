@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HelloWorld;
@@ -27,12 +27,16 @@ class CombatAndWinnerTests
     {int round=c.State.Dice.Round;for(int i=0;i<6;i++)if(RouletteRules.Has(mask,i))Check(c.StopDice(i,c.State.Iteration,round,now),"candidate stops dice");c.Tick(now+DuelDiceContest.CompareDuration+.01,c.State.ParticipantsMask);}
     static void Main()
     {
-        var d=Party();Hit(d,10);Check(d.ForSeat(0).Stunned&&d.ForSeat(0).Health==95,"taser applies five damage and shock");Check(!d.Look(0,0,0,false,10.1),"look blocked during shock");Shock(d,11.999);Check(d.ForSeat(0).Stunned&&d.ForSeat(0).IsStunned(11.999),"shock lasts through pre-deadline");
-        var stale=d.ForSeat(0);Check(!stale.IsStunned(12),"stale snapshots expire visually at exactly two seconds");int sequence=d.Sequence;Shock(d,12);Check(!d.ForSeat(0).Stunned&&d.ForSeat(0).StunnedAt==-1&&d.Sequence>sequence,"server expiry publishes changed state");Check(d.Look(0,1,0,false,12),"control returns at deadline");
+        var d=Party();Hit(d,10);Check(d.ForSeat(0).Stunned&&d.ForSeat(0).Health==95,"taser applies five damage and shock");Check(!d.Look(0,0,0,false,10.1),"look blocked during shock");Shock(d,11.299);Check(d.ForSeat(0).Stunned&&d.ForSeat(0).IsStunned(11.299),"shock lasts through pre-deadline");
+        var stale=d.ForSeat(0);Check(!stale.IsStunned(11.3),"stale snapshots expire visually at exactly 1.3 seconds");int sequence=d.Sequence;Shock(d,11.3);Check(!d.ForSeat(0).Stunned&&d.ForSeat(0).StunnedAt==-1&&d.Sequence>sequence,"server expiry publishes changed state");Check(d.Look(0,1,0,false,11.3),"control returns at deadline");
         var a=(DuelActionState[])typeof(DuelDirector).GetField("actions",Hidden).GetValue(d);a[0].Action=DuelAction.Aim;a[0].LoadedMask=63;int shots=a[0].ShotsFired;Shock(d,13);Shock(d,15);Check(d.ForSeat(0).ShotsFired==shots,"no involuntary fire after expiry even with ammo");
-        Hit(d,20);Phase(d,ClockPhase.Returning,20.4);Shock(d,20.4);Check(!d.ForSeat(0).Stunned,"shooting end clears shock before two seconds");
-        Phase(d,ClockPhase.Shooting,30);Hit(d,30);Shock(d,31.99);Check(d.ForSeat(0).Stunned,"shared shooting shock active");Shock(d,32);Check(!d.ForSeat(0).Stunned&&d.Look(0,2,0,false,32),"non-shooter recovers at two seconds");
-        Phase(d,ClockPhase.QuickHands,40);Hit(d,40);Hit(d,41);Check(d.ForSeat(0).StunnedAt==41,"new hit has its own start time");Shock(d,42);Check(d.ForSeat(0).Stunned,"new hit can refresh effect");Shock(d,43);Check(!d.ForSeat(0).Stunned,"refreshed effect also expires");
+        Hit(d,20);Phase(d,ClockPhase.Returning,20.4);Shock(d,20.4);Check(!d.ForSeat(0).Stunned,"shooting end clears shock before 1.3 seconds");
+        Phase(d,ClockPhase.Shooting,30);Hit(d,30);Shock(d,31.299);Check(d.ForSeat(0).Stunned,"shared shooting shock active");Shock(d,31.3);Check(!d.ForSeat(0).Stunned&&d.Look(0,2,0,false,31.3),"non-shooter recovers at 1.3 seconds");
+        Phase(d,ClockPhase.QuickHands,40);Hit(d,40);Hit(d,41);Check(d.ForSeat(0).StunnedAt==41,"new hit has its own start time");Shock(d,42);Check(d.ForSeat(0).Stunned,"new hit can refresh effect");Shock(d,42.301);Check(!d.ForSeat(0).Stunned,"refreshed effect also expires");
+        var locked=Party();var lockedActions=(DuelActionState[])typeof(DuelDirector).GetField("actions",Hidden).GetValue(locked);lockedActions[0].Action=DuelAction.Aim;lockedActions[0].LoadedMask=63;Hit(locked,50);
+        var before=locked.ForSeat(0);foreach(double time in new[]{50.15,50.4,50.8,51.29})Shock(locked,time);
+        Check(locked.ForSeat(0).ShotsFired==before.ShotsFired&&locked.ForSeat(0).Ammo==before.Ammo&&locked.ForSeat(0).AimYaw==before.AimYaw&&locked.ForSeat(0).AimPitch==before.AimPitch,"stun never moves server aim or consumes loaded ammunition");
+        Check(!locked.Fire(0,0,0,false,locked.ForSeat(0).Version,51,51),"manual fire is blocked during shock");Shock(locked,51.301);Check(!locked.ForSeat(0).Stunned,"armed player recovers after 1.3 seconds");
         var unique=Countdown(0,.2,.2);Check(unique.State.Phase==ClockPhase.Ranking&&unique.State.First==0,"unique countdown winner skips lower tie");
         var top=Countdown(0,0,.4);Check(top.State.Phase==ClockPhase.Dice&&top.State.Dice.PendingMask==3,"only first-place countdown tie rolls");StopDice(top,top.State.PhaseAt+.1,3);Check(top.State.Phase==ClockPhase.Ranking&&top.State.First==0,"top dice chooses shooter");
         var lowerDice=Countdown(0,0,0,.5);StopDice(lowerDice,lowerDice.State.PhaseAt+.1,7);Check(lowerDice.State.Phase==ClockPhase.Ranking&&lowerDice.State.First==0,"lower equal dice never reroll after unique highest face");

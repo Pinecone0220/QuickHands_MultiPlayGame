@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 namespace HelloWorld
@@ -27,6 +27,7 @@ namespace HelloWorld
         private Label quickStartNumber,quickStartTitle;
         private Label partySelectionTitle,miniGameName;
         private readonly Label[] partyReelLabels=new Label[5];
+        private readonly VisualElement[] partyReelStrikes=new VisualElement[5];
         private DuelDeathCause renderedDeathCause;
         private int announcedTimeoutRound=-1;
         private int deathBannerLife=-1;
@@ -46,9 +47,11 @@ namespace HelloWorld
         private int victoryRound = -1, announcedVictoryRound = -1;
         private double victoryExpiresAt;
         private double victoryShownAt;
+        private int resultCueMask;
         private const double VictoryHold = 0.8, VictoryRise = 0.6;
         private const double HighlightStart = VictoryHold + VictoryRise, HighlightHold = 0.8, HighlightRise = 0.6;
         private const double ResultsStart = HighlightStart + HighlightHold + HighlightRise;
+        private const double ResultFooterDelay=.65,ResultFooterDuration=.55;
         private VisualElement resultsLayer, resultsRows, resultsFooter;
         private Label resultsSummary, resultsReady;
         private bool resultLayout;
@@ -61,7 +64,9 @@ namespace HelloWorld
         public const float NameplateHealthHeight=24;
         private VisualElement localPlayerInfo;
         private Image localWeaponIcon;
-        private Button addBot;
+        private Button addBot,removeBot;
+        private VisualElement botControls;
+        private readonly Button[] botLevels=new Button[3];
         private Label localHealth;
         private VisualElement nameplateLayer;
         private VisualElement aimWarning, scopeShade, deathDetails, deathRows;
@@ -76,10 +81,15 @@ namespace HelloWorld
         private int lastKillShot;
         private int lastKillVictims;
         private sealed class KillEntry { public VisualElement Row; public double ExpiresAt; }
-        private Button rematch, leave, fullscreen,practiceCancel;
+        private Button rematch, leave, fullscreen,practiceCancel,hostPractice,hostPracticeStart;
+        private VisualElement practiceControls;
         private VisualElement roomSettings;
+        private VisualElement developerGameSettings,developerGoldSettings;
+        private IntegerField developerGoldAmount;
+        private Label developerGoldBalance;
+        private bool menuDeveloperMode;
         private Toggle unlimitedShot;
-        private Toggle manualMiniGame,unlimitedItems,autoSelectItems;
+        private Toggle manualMiniGame,unlimitedItems,noItemCooldown,autoSelectItems;
         private Label loadoutTitle;
         private VisualElement loadoutChoice;
         private readonly Button[] loadoutButtons=new Button[DuelLoadout.ItemCount];
@@ -89,6 +99,7 @@ namespace HelloWorld
         private Label recoveryUsedMark;
         private int manualRound=-1,manualIteration=-1;
         private readonly Texture2D[] itemIcons=new Texture2D[DuelLoadout.ItemCount];
+        private readonly Texture2D[] itemInfoIcons=new Texture2D[DuelLoadout.ItemCount];
         private Texture2D healTexture,electricTexture;
         private readonly VisualElement[] weaponInfoCards=new VisualElement[WeaponRules.Selectable.Length],itemInfoCards=new VisualElement[DuelLoadout.ItemCount];
         private Label infoTitle,infoIntro;
@@ -121,13 +132,15 @@ namespace HelloWorld
             font = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Arial" }, 18);
             foreach(var weapon in WeaponRules.Selectable)weaponIcons[(int)weapon]=MakeWeaponIcon(weapon);
             headshotIcon=DuelHitPartArt.Icon(DuelHitPart.Head);legshotIcon=DuelHitPartArt.Icon(DuelHitPart.Legs);
-            for(int i=0;i<DuelLoadout.ItemCount;i++)itemIcons[i]=DuelItemArt.Icon((DuelItem)i);weaponIcons[2]=DuelItemArt.Icon(DuelItem.Taser);
+            for(int i=0;i<DuelLoadout.ItemCount;i++){itemIcons[i]=DuelItemArt.Icon((DuelItem)i);itemInfoIcons[i]=DuelItemArt.Icon((DuelItem)i);}weaponIcons[2]=DuelItemArt.Icon(DuelItem.Taser);
+            RefreshSkinIcons();
             root.style.unityFont = font; root.pickingMode = PickingMode.Ignore;
             var scroll = new ScrollView(ScrollViewMode.Vertical); scroll.contentViewport.style.overflow=Overflow.Hidden; scroll.AddToClassList("menu-scroll"); root.Add(scroll); menu = scroll;
             var panel = Box(scroll, "menu-panel");
             Text(panel, "Quick Hands", "wordmark");
             Text(panel, "퀵핸즈", "title");
             Text(panel,"파티 모드","eyebrow");
+            Button(panel,"패치노트",()=>SetPatchNotes(true),"secondary");
             Button(panel,"미니게임 정보",()=>{SetWeaponInfo(true);SetMiniGameInfo();},"secondary");
             weaponInfoButton=Button(panel,"무기 정보",()=>{SetWeaponInfo(true);SetInfoMode(false);},"secondary");
             Button(panel,"아이템 정보",()=>{SetWeaponInfo(true);SetInfoMode(true);},"secondary");
@@ -136,12 +149,7 @@ namespace HelloWorld
             panel.Add(nickname);
             Text(panel, "최대 16자 · 비워 두면 입장 순서대로 player1, player2…", "fineprint");
             Text(panel, "01  /  AI DUEL", "eyebrow");
-            var difficulty = new DropdownField("AI 난이도", new System.Collections.Generic.List<string> { "쉬움", "보통", "어려움" }, 1);
-            difficulty.RegisterValueChangedCallback(e => manager.Difficulty = (AiDifficulty)difficulty.index); panel.Add(difficulty);
-            var aiCount = new DropdownField("상대 AI 수", new System.Collections.Generic.List<string> { "1명 (총 2명)", "2명 (총 3명)", "3명 (총 4명)", "4명 (총 5명)", "5명 (총 6명)" }, 0);
-            aiCount.RegisterValueChangedCallback(e => manager.AiCount = aiCount.index + 1); panel.Add(aiCount);
-            Text(panel, "쉬움: 느림 · 실수 많음 / 보통: 중간 / 어려움: 빠름 · 정확", "fineprint");
-            Button(panel, "AI 대결 시작", () => manager.Begin(DuelMode.AI, false, "127.0.0.1", "7777"), "primary");
+            Button(panel, "싱글플레이 로비", () => manager.Begin(DuelMode.AI, false, "127.0.0.1", "7777"), "primary");
             Text(panel, "02  /  PVP DUEL", "eyebrow");
             BuildRoomMenu(panel);
             var musicCredit=Text(panel,"BGM: Local Forecast - Elevator\nKevin MacLeod (incompetech.com) · CC BY 3.0","fineprint");
@@ -172,7 +180,7 @@ namespace HelloWorld
             partySelectionTitle=Text(selector,"미니게임 선택 중","party-selection-title");
             var reelWindow=Box(selector,"party-reel-window");reelWindow.pickingMode=PickingMode.Ignore;
             partyReel=Box(reelWindow,"party-reel");partyReel.pickingMode=PickingMode.Ignore;
-            for(int i=0;i<partyReelLabels.Length;i++){partyReelLabels[i]=Text(partyReel,"","party-reel-label");partyReelLabels[i].pickingMode=PickingMode.Ignore;}
+            for(int i=0;i<partyReelLabels.Length;i++){var row=Box(partyReel,"party-reel-row");row.pickingMode=PickingMode.Ignore;partyReelLabels[i]=Text(row,"","party-reel-label");partyReelLabels[i].pickingMode=PickingMode.Ignore;partyReelStrikes[i]=Box(row,"party-reel-strike");partyReelStrikes[i].pickingMode=PickingMode.Ignore;}
             Box(reelWindow,"party-reel-focus").pickingMode=PickingMode.Ignore;
             quickStartLayer=Box(root,"quick-start-layer");quickStartLayer.pickingMode=PickingMode.Ignore;
             quickStartTitle=Text(quickStartLayer,"대난투","quick-start-title");quickStartTitle.pickingMode=PickingMode.Ignore;
@@ -207,16 +215,23 @@ namespace HelloWorld
                 Text(button,DuelItemArt.Name(item),"item-name").pickingMode=PickingMode.Ignore;
             }
             rematch = Button(bottom, "다시 대결", () => HelloWorldPlayer.Local?.Rematch(), "primary");
+            BuildRelayCodeButton(root);
             roomShotSummary=Text(bottom,"","room-shot-summary");
             roomSettings=Box(root,"room-settings");Show(roomSettings,false);
             Text(roomSettings,"개발자 모드 · F11","room-settings-title");
-            unlimitedShot=new Toggle("사격시간 무제한");roomSettings.Add(unlimitedShot);
-            shotSeconds=new IntegerField("제한시간 (초)"){value=10,isDelayed=true};roomSettings.Add(shotSeconds);
-            unlimitedItems=new Toggle("아이템 무한 사용");roomSettings.Add(unlimitedItems);unlimitedItems.RegisterValueChangedCallback(e=>manager.SetRoomUnlimitedItems(e.newValue));
-            autoSelectItems=new Toggle("아이템 모두 선택");roomSettings.Add(autoSelectItems);autoSelectItems.RegisterValueChangedCallback(e=>manager.SetRoomAutoSelectItems(e.newValue));
-            manualMiniGame=new Toggle("미니게임 직접 선택");roomSettings.Add(manualMiniGame);manualMiniGame.RegisterValueChangedCallback(e=>manager.SetRoomManualMiniGame(e.newValue));
-            foreach(var toggle in new[]{unlimitedShot,unlimitedItems,autoSelectItems,manualMiniGame})DuelPointer.EnableAltClick(toggle);
-            Text(roomSettings,"장전 완료 후 적용 · 1~60초","room-settings-note");
+            developerGameSettings=Box(roomSettings,"developer-game-settings");
+            unlimitedShot=new Toggle("사격시간 무제한");developerGameSettings.Add(unlimitedShot);
+            shotSeconds=new IntegerField("제한시간 (초)"){value=10,isDelayed=true};developerGameSettings.Add(shotSeconds);
+            unlimitedItems=new Toggle("아이템 무한 사용");developerGameSettings.Add(unlimitedItems);unlimitedItems.RegisterValueChangedCallback(e=>manager.SetRoomUnlimitedItems(e.newValue));
+            noItemCooldown=new Toggle("아이템 쿨타임 제거");developerGameSettings.Add(noItemCooldown);noItemCooldown.RegisterValueChangedCallback(e=>manager.SetRoomNoItemCooldown(e.newValue));
+            autoSelectItems=new Toggle("아이템 모두 선택");developerGameSettings.Add(autoSelectItems);autoSelectItems.RegisterValueChangedCallback(e=>manager.SetRoomAutoSelectItems(e.newValue));
+            manualMiniGame=new Toggle("미니게임 직접 선택");developerGameSettings.Add(manualMiniGame);manualMiniGame.RegisterValueChangedCallback(e=>manager.SetRoomManualMiniGame(e.newValue));
+            foreach(var toggle in new[]{unlimitedShot,unlimitedItems,noItemCooldown,autoSelectItems,manualMiniGame})DuelPointer.EnableAltClick(toggle);
+            Text(developerGameSettings,"장전 완료 후 적용 · 1~60초","room-settings-note");
+            developerGoldSettings=Box(roomSettings,"developer-gold-settings");
+            developerGoldBalance=Text(developerGoldSettings,"","room-settings-note");
+            developerGoldAmount=new IntegerField("골드 추가"){value=100,isDelayed=true};developerGoldSettings.Add(developerGoldAmount);
+            Button(developerGoldSettings,"골드 추가",()=>{if(!manager.Busy){AddGachaGold(developerGoldAmount.value);UpdateGachaGold();}},"secondary");
             unlimitedShot.RegisterValueChangedCallback(e=>manager.SetRoomShotTime(e.newValue?0:Mathf.Clamp(shotSeconds.value,1,60)));
             shotSeconds.RegisterValueChangedCallback(e=>{if(!unlimitedShot.value)manager.SetRoomShotTime(Mathf.Clamp(e.newValue,1,60));});
             shotTimer=Text(table,"","shot-time-remaining");shotTimer.pickingMode=PickingMode.Ignore;
@@ -225,8 +240,11 @@ namespace HelloWorld
             fullscreen = Button(root, "", ToggleFullscreen, "fullscreen");
             fullscreen.AddToClassList("secondary");
             UpdateFullscreenLabel();
-            practiceCancel=Button(root,"준비 취소",()=>HelloWorldPlayer.Local?.Rematch(),"practice-cancel");
+            practiceControls=Box(root,"practice-controls");
+            practiceCancel=Button(practiceControls,"준비 취소",()=>{var player=HelloWorldPlayer.Local;if(player==null)return;if(player.Seat.Value==0&&player.NetworkManager.IsHost)player.ToggleHostPractice();else player.Rematch();},"practice-cancel");
             practiceCancel.AddToClassList("secondary");Show(practiceCancel,false);
+            hostPractice=Button(bottom,"연습 준비",()=>HelloWorldPlayer.Local?.ToggleHostPractice(),"host-practice");hostPractice.AddToClassList("secondary");bottom.Insert(bottom.IndexOf(rematch),hostPractice);Show(hostPractice,false);
+            hostPracticeStart=Button(practiceControls,"게임 시작",()=>HelloWorldPlayer.Local?.Rematch(),"host-practice-start");hostPracticeStart.AddToClassList("primary");Show(hostPracticeStart,false);Show(practiceControls,false);
             localPlayerInfo=Box(root,"local-player-info");localPlayerInfo.pickingMode=PickingMode.Ignore;
             var localWeaponPanel=Button(localPlayerInfo,"",ToggleQuickInventory,"local-weapon-panel");
             BindHoverTip(localWeaponPanel,LocalEquipmentHover);
@@ -236,9 +254,14 @@ namespace HelloWorld
             Text(localHealthPanel,"체력","local-health-title").pickingMode=PickingMode.Ignore;
             localHealth=Text(localHealthPanel,"","local-health");localHealth.pickingMode=PickingMode.Ignore;
             Show(localPlayerInfo,false);BuildSpectatorNotice();
-            addBot=Button(root,"봇 추가",manager.AddLobbyBot,"secondary");
-            addBot.style.position=Position.Absolute;addBot.style.left=18;addBot.style.top=18;addBot.style.width=140;
-            Show(addBot,false);
+            botControls=Box(root,"bot-controls");
+            Text(botControls,"봇 난이도","bot-controls-title");
+            var levels=Box(botControls,"bot-controls-row");string[] levelNames={"쉬움","보통","어려움"};
+            for(int i=0;i<botLevels.Length;i++){int level=i;botLevels[i]=Button(levels,levelNames[i],()=>manager.LobbyBotDifficulty=(AiDifficulty)level,"bot-level");}
+            var botActions=Box(botControls,"bot-controls-row");
+            addBot=Button(botActions,"봇 추가",manager.AddLobbyBot,"bot-action");
+            removeBot=Button(botActions,"봇 제거",manager.RemoveLobbyBot,"bot-action");
+            Show(botControls,false);
             damageOverlay = Box(root, "damage-overlay"); damageOverlay.pickingMode = PickingMode.Ignore;
             hitVignette=MakeAimVignette(false,true);damageOverlay.style.backgroundImage=new StyleBackground(hitVignette);
             reelSound=gameObject.AddComponent<AudioSource>();reelSound.playOnAwake=false;reelSound.volume=.22f;
@@ -251,7 +274,7 @@ namespace HelloWorld
                 line.style.width=horizontal?4:1;line.style.height=horizontal?1:4;
                 line.style.left=horizontal?(i==0?0:11):7;line.style.top=horizontal?7:(i==2?0:11);
             }
-            crosshair.SendToBack();Show(crosshair,false);
+            Show(crosshair,false);
             hitMarker=Box(root,"hit-marker");hitMarker.pickingMode=PickingMode.Ignore;
             for(int i=0;i<4;i++)
             {var line=Box(hitMarker,"hit-marker-line");line.pickingMode=PickingMode.Ignore;line.style.left=i%2==0?4:20;line.style.top=i<2?8:24;line.style.rotate=new Rotate(Angle.Degrees(i==0||i==3?45:-45));}
@@ -325,6 +348,9 @@ namespace HelloWorld
             BuildHoverTip();
             BuildInkOverlay();
             BuildQuitConfirmation();
+            BuildPatchNotes();
+            BuildGacha();
+            BuildSettings();
             Refresh();
         }
         private void BuildWeaponInfo()
@@ -336,7 +362,7 @@ namespace HelloWorld
             infoScroll=scroll;
             scroll.contentViewport.style.overflow=Overflow.Hidden;
             scroll.AddToClassList("weapon-info-scroll");panel.Add(scroll);
-            infoIntro=Text(scroll,"무기는 로비에서 선택합니다. 대난투에서는 숫자 입력으로 준비·장전하고 직접 사격합니다. 다른 미니게임은 1등에게 한 발의 사격 기회를 줍니다. 좌클릭으로 발사하며, 리볼버와 저격소총은 우클릭 홀드로 정조준합니다.","weapon-info-intro");
+            infoIntro=Text(scroll,"무기는 로비에서 선택합니다. 대난투에서는 숫자 입력으로 준비·장전하고 직접 사격합니다. 다른 미니게임은 1등에게 한 발의 사격 기회를 줍니다. 화면 중앙으로 겨냥하고 좌클릭으로 발사합니다. 윈체스터는 우클릭을 누르는 동안 가늠자로 정조준할 수 있습니다.","weapon-info-intro");
             for(int i=0;i<WeaponRules.Selectable.Length;i++)
             {
                 var weapon=WeaponRules.Selectable[i];var card=Box(scroll,"weapon-info-card");weaponInfoCards[i]=card;var header=Box(card,"weapon-info-card-heading");
@@ -347,33 +373,33 @@ namespace HelloWorld
                     Text(card,"대난투 · 장전과 사격","weapon-info-section");
                     Text(card,"집기 → 레버 열기 → 한 발 장전 → 레버 닫기. 각 행동마다 숫자 4개를 입력합니다.\n발사하면 정조준이 풀립니다. 레버를 여는 행동으로 탄피를 배출하고, 새 탄을 넣고 레버를 닫아야 다시 조준·사격할 수 있습니다.","weapon-info-text");
                     Text(card,"피해","weapon-info-section");Text(card,"헤드샷은 체력 100 피해와 함께 목숨 2개를 잃게 합니다. 몸통과 다리는 피해가 없습니다.","weapon-info-text");
-                    Text(card,"사격 성능","weapon-info-section");Text(card,"우클릭으로 3배율 스코프를 봅니다. 정조준 중에만 화면이 흔들리며 탄은 조준점 그대로 나갑니다. 흔들림은 리볼버보다 크고, 지향사격은 화면 흔들림 없이 극심한 탄퍼짐으로 명중이 매우 어렵습니다.","weapon-info-text");
+                    Text(card,"사격 성능","weapon-info-section");Text(card,"우클릭으로 정조준하면 조준한 곳에 정확하게 사격합니다. 지향사격은 탄이 퍼져 명중률이 낮습니다.","weapon-info-text");
                     continue;
                 }
                 Text(card,"대난투 · 장전과 사격","weapon-info-section");
                 Text(card,weapon==DuelWeapon.Revolver?
-                    $"처음 준비는 5개 행동마다 숫자 6개를 입력합니다. 이후 한 발마다 숫자 3개로 장전하며 최대 {WeaponRules.Capacity(weapon)}발까지 넣을 수 있습니다.\n빈 총도 우클릭으로 조준할 수 있고, 한 발만 장전해도 좌클릭으로 사격할 수 있습니다. 남은 탄은 추가 입력 없이 연속 사격합니다.\n재장전은 탄피 빼기(숫자 6개)부터 시작하고 빈 약실마다 숫자 3개로 채웁니다. 남은 실탄은 유지됩니다.":
-                    "집기 → 배럴 열기 → 장전 → 배럴 닫기 순서로, 각 행동마다 숫자 4개를 입력합니다.\n정조준 없이 좌클릭으로 사격합니다. 이후에는 배럴 열기부터 반복하며 탄피가 자동으로 빠진 뒤 새 탄을 넣고 닫습니다.","weapon-info-text");
+                    $"처음 준비는 5개 행동마다 숫자 6개를 입력합니다. 이후 한 발마다 숫자 3개로 장전하며 최대 {WeaponRules.Capacity(weapon)}발까지 넣을 수 있습니다.\n한 발만 장전해도 좌클릭으로 사격할 수 있습니다. 남은 탄은 추가 입력 없이 연속 사격합니다.\n재장전은 탄피 빼기(숫자 6개)부터 시작하고 빈 약실마다 숫자 3개로 채웁니다. 남은 실탄은 유지됩니다.":
+                    "집기 → 배럴 열기 → 장전 → 배럴 닫기 순서로, 각 행동마다 숫자 4개를 입력합니다.\n화면 중앙으로 겨냥하고 좌클릭으로 사격합니다. 이후에는 배럴 열기부터 반복하며 탄피가 자동으로 빠진 뒤 새 탄을 넣고 닫습니다.","weapon-info-text");
                 Text(card,"피해","weapon-info-section");
                 Text(card,weapon==DuelWeapon.Revolver?
                     $"머리 {WeaponRules.Damage(weapon,DuelHitPart.Head)} / 몸통 {WeaponRules.Damage(weapon,DuelHitPart.Body)} / 다리 {WeaponRules.Damage(weapon,DuelHitPart.Legs)}":
                     $"부위에 관계없이 직격 {WeaponRules.Damage(weapon,DuelHitPart.Body)} · 맞은 상대의 좌우 좌석에 각각 25 피해\n사격자와 빈자리·사망자는 주변 피해에서 제외됩니다. 1번과 6번 좌석은 이어지지 않습니다.","weapon-info-text");
                 Text(card,"사격 성능","weapon-info-section");
                 Text(card,weapon==DuelWeapon.Revolver?
-                    "정조준 중에만 화면이 흔들리며 탄은 가늠쇠 방향 그대로 나갑니다. 지향사격은 화면 흔들림 없이 극심하게 퍼지며 맞힌 부위에 따라 피해가 달라집니다.":
-                    "정조준 없이 사격합니다. 화면 흔들림 없이 6도 범위로 산탄이 퍼지며 최대 20m까지 날아갑니다. 실제 맞은 상대 중 중앙에 가까운 한 명과 그 좌우에 피해를 줍니다. 머리 추가 피해는 없습니다.","weapon-info-text");
+                    "화면 중앙으로 정확하게 사격하며, 맞힌 부위에 따라 피해가 달라집니다.":
+                    "화면 중앙을 향해 산탄이 퍼지며 최대 20m까지 날아갑니다. 실제 맞은 상대 중 중앙에 가까운 한 명과 그 좌우에 피해를 줍니다. 머리 추가 피해는 없습니다.","weapon-info-text");
                 Text(card,"대난투 · 특징","weapon-info-section");
                 Text(card,weapon==DuelWeapon.Revolver?
                     "입력할 숫자가 한 자리씩 공개됩니다. 오입력하면 현재 행동의 숫자가 모두 바뀌고 처음부터 다시 입력하지만, 이미 장전한 탄은 유지됩니다.\n적게 장전해 먼저 쏘거나, 여러 발을 준비해 연속 사격할 수 있습니다.":
                     "리볼버보다 준비 행동과 입력 수가 적어 빠르게 사격을 준비할 수 있습니다. 한 발 쏠 때마다 배럴 열기 → 장전 → 배럴 닫기의 3개 행동을 다시 입력해야 합니다.","weapon-info-text");
             }
             for(int i=0;i<DuelLoadout.ItemCount;i++)
-            {var card=Box(scroll,"item-info-card");card.AddToClassList("weapon-info-card");itemInfoCards[i]=card;var h=Box(card,"weapon-info-card-heading");var icon=new Image{image=itemIcons[i],scaleMode=ScaleMode.ScaleToFit};icon.AddToClassList("weapon-info-icon");h.Add(icon);Text(h,DuelItemArt.Name((DuelItem)i),"weapon-info-name");
+            {var card=Box(scroll,"item-info-card");card.AddToClassList("weapon-info-card");itemInfoCards[i]=card;var h=Box(card,"weapon-info-card-heading");var icon=new Image{image=itemInfoIcons[i],scaleMode=ScaleMode.ScaleToFit};icon.AddToClassList("weapon-info-icon");h.Add(icon);Text(h,DuelItemArt.Name((DuelItem)i),"weapon-info-name");
                 if(i==(int)DuelItem.NoruFace){Text(card,"테이저 면역 · 2게임 쿨타임","weapon-info-section");Text(card,"아이템 사용 시간에 착용하는 두꺼운 패딩입니다. 사격자를 포함해 누구나 사용할 수 있고, 이번 사격 턴 동안 테이저건의 피해와 감전을 모두 막습니다. 테이저에 맞지 않아도 사격 턴이 끝나면 벗습니다.","weapon-info-text");continue;}
-                if(i==(int)DuelItem.Bullet){Text(card,"발사 1회 추가 · 2개 지급 · 소모성","weapon-info-section");Text(card,"아이템 사용 시간에 사격자만 사용할 수 있습니다. 이번 사격 턴에 한 발을 더 쏠 수 있으며, 한 턴에 1개만 사용합니다. 발사하지 않아도 사용 시 1개를 소모합니다. 남은 수량은 다음 미니게임에도 유지됩니다.","weapon-info-text");continue;}
+                if(i==(int)DuelItem.Bullet){Text(card,"발사 1회 추가 · 2개 지급 · 소모성","weapon-info-section");Text(card,"사격자는 아이템 사용 시간에 선택할 수 있습니다. 시간이 끝나면 아이템을 사용해 이번 사격 턴에 한 발을 더 쏠 수 있습니다. 선택한 아이템을 다시 누르면 취소됩니다. 발사하지 않아도 사용 시 1개를 소모합니다.","weapon-info-text");continue;}
                 if(i==(int)DuelItem.Ink){Text(card,"투척 · 시야 방해 · 소모성","weapon-info-section");Text(card,"선택한 뒤 좌클릭으로 던집니다. 포물선으로 날아가 맞은 상대의 화면 대부분을 최대 5초 가립니다.","weapon-info-text");continue;}
-                Text(card,i==0?"체력 50 회복 · 최대 체력 100 · 소모성":"피해 5 · 최대 2초 감전 · 2게임 쿨타임","weapon-info-section");
-                Text(card,i==0?"아이템 사용 시간에 클릭하면 초록색 회복 효과와 함께 즉시 회복하며 한 번 사용하면 소비됩니다. 체력이 가득 차면 사용할 수 없습니다.":"사격자 외의 상대에게도 쏠 수 있습니다. 맞으면 5 피해와 함께 최대 2초 동안 시점 조작을 막습니다. 사격이 먼저 끝나면 감전도 해제됩니다. 사격 중인 상대는 무작위로 격발하며, 비사격자는 추가 효과가 없습니다.","weapon-info-text");}
+                Text(card,i==0?"체력 50 회복 · 최대 체력 100 · 소모성":"피해 5 · 양옆 자리까지 · 1.3초 감전 · 2게임 쿨타임","weapon-info-section");
+                Text(card,i==0?"아이템 사용 시간에 클릭하면 초록색 회복 효과와 함께 즉시 회복하며 한 번 사용하면 소비됩니다. 체력이 가득 차면 사용할 수 없습니다.":"좌클릭으로 화면 중앙을 향해 쏩니다. 맞은 상대는 최대 1.3초 동안 시점 조작이 막힙니다. 사격이 끝나면 감전도 해제됩니다.","weapon-info-text");}
             for(int i=0;i<PartyGames.Count;i++)
             {
                 var game=PartyGames.At(i);var card=Box(scroll,"weapon-info-card");miniGameInfoCards[i]=card;
@@ -400,11 +426,11 @@ namespace HelloWorld
             manualSelection.BringToFront();
         }
         private void SetInfoMode(bool items)
-        {infoTitle.text=items?"아이템 정보":"무기 정보";infoIntro.text=items?"로비에서 서로 다른 아이템 2개를 골라 파티에 가져갑니다. 대난투에서는 시작 전 하나를 선택하고, Alt를 누른 채 오른쪽 아래 무기 이미지를 클릭해 무장을 전환합니다. 선택한 장비 아이템은 사용하지 않아도 미니게임 종료 시 소모·쿨타임이 적용됩니다.":"무기는 로비에서 선택합니다. 대난투에서는 숫자 입력으로 준비·장전하고 직접 사격합니다. 다른 미니게임은 1등에게 한 발의 사격 기회를 줍니다. 좌클릭으로 발사하며, 리볼버와 저격소총은 우클릭 홀드로 정조준합니다.";foreach(var card in weaponInfoCards)Show(card,!items);foreach(var card in itemInfoCards)Show(card,items);foreach(var card in miniGameInfoCards)Show(card,false);infoScroll.scrollOffset=Vector2.zero;}
+        {infoTitle.text=items?"아이템 정보":"무기 정보";infoIntro.text=items?"로비에서 서로 다른 아이템 2개를 골라 파티에 가져갑니다. 대난투에서는 시작 전 하나를 선택하고, 마우스 휠을 돌리거나 Alt를 누른 채 오른쪽 아래 무기 이미지를 클릭해 무장을 전환합니다. 선택한 장비 아이템은 사용하지 않아도 미니게임 종료 시 소모·쿨타임이 적용됩니다.":"무기는 로비에서 선택합니다. 대난투에서는 숫자 입력으로 준비·장전하고 직접 사격합니다. 다른 미니게임은 1등에게 한 발의 사격 기회를 줍니다. 화면 중앙으로 겨냥하고 좌클릭으로 발사합니다. 윈체스터는 우클릭을 누르는 동안 가늠자로 정조준할 수 있습니다.";foreach(var card in weaponInfoCards)Show(card,!items);foreach(var card in itemInfoCards)Show(card,items);foreach(var card in miniGameInfoCards)Show(card,false);infoScroll.scrollOffset=Vector2.zero;}
         private void SetMiniGameInfo()
         {
             infoTitle.text="미니게임 정보";
-            infoIntro.text="체력 100·목숨 3개로 시작하며, 목숨이 남은 마지막 한 명이 최종 승리합니다. 직전에 했던 미니게임을 제외하고 추첨합니다. 대난투는 모두가 싸우고, 나머지는 1등이 아이템 사용 시간 후 한 발을 사격합니다. 1등을 가릴 수 없는 무승부는 주사위 겨루기로 결정합니다.";
+            infoIntro.text="체력 100·목숨 3개로 시작하며, 목숨이 남은 마지막 한 명이 최종 승리합니다. 한 사이클에서 진행한 미니게임을 제외하고 추첨하며, 모두 진행하면 다시 추첨합니다. 대난투는 모두가 싸우고, 나머지는 1등이 아이템 사용 시간 후 한 발을 사격합니다. 1등을 가릴 수 없는 무승부는 주사위 겨루기로 결정합니다.";
             foreach(var card in weaponInfoCards)Show(card,false);foreach(var card in itemInfoCards)Show(card,false);
             foreach(var card in miniGameInfoCards)Show(card,true);
             infoScroll.scrollOffset=Vector2.zero;
@@ -467,8 +493,8 @@ namespace HelloWorld
         {
             if (resultLayout == enabled) return;
             resultLayout = enabled;
-            if (enabled) { resultsFooter.Add(weaponChoice); resultsFooter.Add(rematch); }
-            else { inputPanel.Add(weaponChoice); inputPanel.Add(rematch); }
+            if (enabled) { resultsFooter.Add(weaponChoice); resultsFooter.Add(hostPractice); resultsFooter.Add(rematch); }
+            else { inputPanel.Add(weaponChoice); inputPanel.Add(hostPractice); inputPanel.Add(rematch); }
         }
         private bool CanAct()
         {
@@ -509,7 +535,11 @@ namespace HelloWorld
         private void Update()
         {
             if (manager == null || root == null) return;
+            UpdateSettings();
+            UpdateGacha();
             Refresh();
+            UpdateSettingsLayer();
+            UpdateAttendance();
             if(DuelChat.BlocksGameplay||DuelPointer.BlocksActions)return;
             if(Keyboard.current!=null&&Keyboard.current.spaceKey.wasPressedThisFrame){if(StopOwnDice())return;StopClock();}
             var k = Keyboard.current;if(k==null)return;
@@ -549,25 +579,36 @@ namespace HelloWorld
         {
             UpdateFullscreenLabel();
             UpdateMenuQuit();
+            UpdatePatchNotes();
             var p = HelloWorldPlayer.Local; bool ready = manager.Busy && p != null && p.IsSpawned && p.Seat.Value >= 0;
-            bool practice=ready&&p.State.Value.IsPracticing(p.Seat.Value);Show(practiceCancel,practice);
+            bool practice=ready&&p.State.Value.IsPracticing(p.Seat.Value);Show(practiceControls,practice);Show(practiceCancel,practice);
             bool botLobby=ready&&p.NetworkManager.IsHost&&p.State.Value.Stage==DuelStage.Idle&&p.State.Value.Phase!=DuelPhase.Playing;
-            Show(addBot,botLobby);addBot.SetEnabled(botLobby&&manager.CanAddBot);
+            bool hostLobby=botLobby&&p.Seat.Value==0;
+            Show(hostPractice,hostLobby&&!practice);hostPractice.SetEnabled(hostLobby&&!practice&&DuelLoadout.Complete(p.State.Value.ForSeat(0).SelectedItems));
+            hostPractice.text=hostLobby&&!DuelLoadout.Complete(p.State.Value.ForSeat(0).SelectedItems)?"아이템 2개 선택":"연습 준비";
+            Show(hostPracticeStart,hostLobby&&practice);hostPracticeStart.SetEnabled(hostLobby&&practice&&manager.CanHostStart);
+            Show(botControls,botLobby);addBot.SetEnabled(botLobby&&manager.CanAddBot);removeBot.SetEnabled(botLobby&&manager.CanRemoveBot);
+            for(int i=0;i<botLevels.Length;i++){botLevels[i].SetEnabled(botLobby&&manager.CanAddBot);botLevels[i].EnableInClassList("selected",(int)manager.LobbyBotDifficulty==i);}
             addBot.text=ready&&RouletteRules.Count(p.State.Value.ConnectedMask)>=RouletteRules.MaxPlayers?"정원 6명":"봇 추가";
             Show(menu, !manager.Busy); Show(table, ready); Show(leave, manager.Busy); Show(status, !ready); status.text = manager.Status;
             if(manager.Busy&&weaponInfoOpen)SetWeaponInfo(false);
-            RefreshRoomBrowser();
+            RefreshConnectionMenu();
             Show(nameplateLayer, ready);
-            if(ready&&!DuelChat.BlocksGameplay&&p.NetworkManager.IsHost&&Keyboard.current!=null&&Keyboard.current.f11Key.wasPressedThisFrame)manager.ToggleDeveloperMode();
-            bool settingsVisible=ready&&p.NetworkManager.IsHost&&manager.DeveloperMode;
+            if(!DuelChat.BlocksGameplay&&Keyboard.current!=null&&Keyboard.current.f11Key.wasPressedThisFrame)
+            {if(ready&&p.NetworkManager.IsHost)manager.ToggleDeveloperMode();else if(!manager.Busy)menuDeveloperMode=!menuDeveloperMode;}
+            if(manager.Busy)menuDeveloperMode=false;
+            bool settingsVisible=ready&&p.NetworkManager.IsHost&&manager.DeveloperMode||!manager.Busy&&menuDeveloperMode;
             Show(roomSettings,settingsVisible);Show(shotTimer,false);Show(roomShotSummary,false);
-            roomSettings.SetEnabled(settingsVisible&&p.State.Value.Stage==DuelStage.Idle&&p.State.Value.Phase!=DuelPhase.Playing);
-            if(settingsVisible)
+            developerGameSettings.SetEnabled(ready&&p.NetworkManager.IsHost&&p.State.Value.Stage==DuelStage.Idle&&p.State.Value.Phase!=DuelPhase.Playing);
+            developerGoldSettings.SetEnabled(!manager.Busy);
+            if(settingsVisible){roomSettings.BringToFront();developerGoldBalance.text="보유 골드: "+GachaGold.ToString("N0")+"원";}
+            if(settingsVisible&&ready)
             {
                 roomSettings.BringToFront();
                 float limit=p.State.Value.ShotTimeLimit;unlimitedShot.SetValueWithoutNotify(limit==0);
                 manualMiniGame.SetValueWithoutNotify(p.State.Value.ManualMiniGame);
                 unlimitedItems.SetValueWithoutNotify(p.State.Value.UnlimitedItems);
+                noItemCooldown.SetValueWithoutNotify(p.State.Value.NoItemCooldown);
                 autoSelectItems.SetValueWithoutNotify(p.State.Value.AutoSelectItems);
                 if(limit>0)shotSeconds.SetValueWithoutNotify(Mathf.RoundToInt(limit));shotSeconds.SetEnabled(limit>0);
             }
@@ -588,21 +629,27 @@ namespace HelloWorld
             if(ready)
             {
                 localHealth.text=displayed.Health.ToString();
-                localWeaponIcon.image=displayed.QuickEquipped?(displayed.QuickItem==3?itemIcons[2]:itemIcons[1]):weaponIcons[(int)displayed.SelectedWeapon];
+                bool preview=p.State.Value.CanPreviewEquipment(effectSeat);
+                localWeaponIcon.image=displayed.Ink.Armed||preview&&displayed.PreviewItem==(int)DuelWheelSlot.Ink?itemIcons[2]:displayed.QuickEquipped&&displayed.QuickItem==2||displayed.TaserArmed&&displayed.Weapon==DuelWeapon.Taser||preview&&displayed.PreviewItem==(int)DuelWheelSlot.Taser?itemIcons[1]:weaponIcons[(int)displayed.SelectedWeapon];
             }
-            bool healed=ready&&displayed.HealAt>=0&&effectNow-displayed.HealAt<1.1&&p.State.Value.Clock.Phase==ClockPhase.ItemPreparation;
+            bool healed=ready&&displayed.HealAt>=0&&effectNow-displayed.HealAt<1.1&&(p.State.Value.IsPracticing(effectSeat)||p.State.Value.Clock.Phase==ClockPhase.ItemPreparation||p.State.Value.Clock.Phase==ClockPhase.Shooting||p.State.Value.Clock.Phase==ClockPhase.QuickCountdown);
+            if(healed)healOverlay.style.backgroundImage=new StyleBackground(ItemEffectTexture(false,DuelSkinEffects.Skin(effectSeat,DuelItem.Recovery)));
             Show(healOverlay,healed);healOverlay.style.opacity=healed?Mathf.Clamp01((float)(1.1-(effectNow-displayed.HealAt)))*(.8f+.2f*Mathf.Sin(Time.unscaledTime*9)):0;
-            Show(electricOverlay,ready&&displayed.IsStunned(effectNow)&&p.State.Value.Phase==DuelPhase.Playing&&DuelInk.Shooting(p.State.Value.Clock.Phase));electricOverlay.style.opacity=.7f+.3f*Mathf.Sin(Time.unscaledTime*35);
+            if(ready&&displayed.IsStunned(effectNow))electricOverlay.style.backgroundImage=new StyleBackground(ItemEffectTexture(true,DuelSkinEffects.SourceSkin(p.State.Value,effectSeat,DuelItem.Taser)));
+            Show(electricOverlay,ready&&displayed.IsStunned(effectNow)&&(p.State.Value.IsPracticing(effectSeat)||p.State.Value.Phase==DuelPhase.Playing&&DuelInk.Shooting(p.State.Value.Clock.Phase)));electricOverlay.style.opacity=.7f+.3f*Mathf.Sin(Time.unscaledTime*35);
             Show(aimWarning, ready && IsUnderAim(p.State.Value, effectSeat));
             var fps = GetComponent<DuelFirstPerson>();
             bool ads = ready && (spectator!=null&&spectator.Watching?displayed.Aiming:fps!=null&&fps.Active&&fps.Ads) && displayed.Weapon!=DuelWeapon.Taser;
             bool firstPersonView=ready&&(practice||p.State.Value.Phase==DuelPhase.Waiting||
                 p.State.Value.Phase==DuelPhase.Playing&&p.State.Value.Alive(p.Seat.Value)&&
                 (p.State.Value.Stage==DuelStage.Countdown||p.State.Value.Stage==DuelStage.Racing));
-            Show(crosshair,firstPersonView&&own.DiedAt<0&&own.LivesRemaining>0&&!(ads&&own.Weapon==DuelWeapon.BAS));
+            bool combatShooting=ready&&p.State.Value.Phase==DuelPhase.Playing&&DuelInk.Shooting(p.State.Value.Clock.Phase);
+            bool showCrosshair=firstPersonView&&own.DiedAt<0&&own.LivesRemaining>0&&!combatShooting&&!(ads&&own.Weapon==DuelWeapon.BAS);
+            Show(crosshair,showCrosshair);
+            if(showCrosshair)crosshair.BringToFront();
             aimWarning.style.opacity = ads ? .05f : 1;
             Show(scopeShade, ads&&displayed.Weapon!=DuelWeapon.BAS);
-            UpdateBasScope(ads&&displayed.Weapon==DuelWeapon.BAS);
+            UpdateBasScope(false);
             Show(killFeed, ready);
             UpdateDeathDetails(ready ? p : null);
             if (!ready) { announcedTimeoutRound=-1; hadPlayer = false; predictionRound = -1; previousShots = 0; killRound = -1; lastKillShot = 0; ClearKills(); victoryRound = announcedVictoryRound = -1; victoryExpiresAt = 0; Show(victoryLayer, false); Show(highlightLayer, false); Show(resultsLayer, false); SetResultLayout(false); renderedResults = default; UpdateInputShake(false); return; }
@@ -617,14 +664,16 @@ namespace HelloWorld
             int fired=0;for(int i=0;i<RouletteRules.MaxPlayers;i++)fired+=s.ForSeat(i).ShotsFired;
             UpdateKills();
             previousShots = fired; hadPlayer = true;
-            bool practiceLever=practice&&mine.Weapon==DuelWeapon.BAS&&mine.Action==DuelAction.OpenBarrel;
-            bool actionVisible = practiceLever || s.Clock.Phase==ClockPhase.QuickHands && s.Phase == DuelPhase.Playing && s.Alive(seat) && s.Stage == DuelStage.Racing &&
-                predicted.Action != DuelAction.Aim && predicted.Action != DuelAction.Fire && !(ads&&mine.Weapon==DuelWeapon.Revolver);
+            bool equipmentBusy=mine.QuickEquipped||DuelInk.Busy(mine.Ink,now);
+            bool practiceLever=practice&&!equipmentBusy&&mine.Weapon==DuelWeapon.BAS&&mine.Action==DuelAction.OpenBarrel;
+            bool actionVisible = !equipmentBusy&&(practiceLever || s.Clock.Phase==ClockPhase.QuickHands && s.Phase == DuelPhase.Playing && s.Alive(seat) && s.Stage == DuelStage.Racing &&
+                predicted.Action != DuelAction.Aim && predicted.Action != DuelAction.Fire && !(ads&&mine.Weapon==DuelWeapon.Revolver));
             bool lobby = s.Stage == DuelStage.Idle && s.Phase != DuelPhase.Playing;
             Show(roomShotSummary,false);
-            bool shotCountdown=s.Clock.Phase==ClockPhase.QuickHands&&s.Alive(seat)&&mine.ShootingStartedAt>=0&&s.ShotTimeLimit>0;
+            float personalShotLimit=s.ShotLimitFor(seat);
+            bool shotCountdown=s.Clock.Phase==ClockPhase.QuickHands&&s.Alive(seat)&&mine.ShootingStartedAt>=0&&personalShotLimit>0;
             Show(shotTimer,shotCountdown);
-            if(shotCountdown)shotTimer.text=$"사격 · {System.Math.Max(0,s.ShotTimeLimit-(now-mine.ShootingStartedAt)):F1}초";
+            if(shotCountdown)shotTimer.text=$"사격 · {System.Math.Max(0,personalShotLimit-(now-mine.ShootingStartedAt)):F1}초";
             bool hasResults = !practice&&s.Results.IsValid && s.Results.Round == s.Round;
             Show(weaponChoice, !practice&&(lobby || hasResults) && s.Connected(seat));
             for (int i = 0; i < weaponButtons.Length; i++)
@@ -633,11 +682,11 @@ namespace HelloWorld
                 weaponButtons[i].SetEnabled(lobby && !RouletteRules.Has(s.ReadyMask, seat));
             }
             Show(loadoutChoice,lobby&&!mine.LoadoutLocked);
-            loadoutTitle.text=s.AutoSelectItems?$"시작 아이템 · 전체 {DuelLoadout.Count(mine.SelectedItems)}종 선택":$"시작 아이템 선택 · {DuelLoadout.Count(mine.SelectedItems)}/{DuelLoadout.Required}";
+            loadoutTitle.text=s.AutoSelectFor(seat)?$"시작 아이템 · 전체 {DuelLoadout.Count(mine.SelectedItems)}종 선택":$"시작 아이템 선택 · {DuelLoadout.Count(mine.SelectedItems)}/{DuelLoadout.Required}";
             for(int i=0;i<loadoutButtons.Length;i++)
             {
                 loadoutButtons[i].EnableInClassList("selected",DuelLoadout.Has(mine.SelectedItems,(DuelItem)i));
-                loadoutButtons[i].SetEnabled(lobby&&!s.AutoSelectItems&&!mine.LoadoutLocked&&!RouletteRules.Has(s.ReadyMask,seat));
+                loadoutButtons[i].SetEnabled(lobby&&!s.AutoSelectFor(seat)&&!mine.LoadoutLocked&&!RouletteRules.Has(s.ReadyMask,seat));
             }
             Show(inputPanel, practiceLever||!practice&&!hasResults && (actionVisible || lobby || s.Stage == DuelStage.Countdown));
             UpdateInputShake(actionVisible);
@@ -647,7 +696,7 @@ namespace HelloWorld
             for (int i = 0; i < RouletteRules.MaxPlayers; i++)
             {
                 nameplates[i].EnableInClassList("nameplate-shooter",highlightShooter&&s.Clock.First==i&&s.Alive(i));
-                string detail = !s.Connected(i) ? "빈 자리" : lobby ? (RouletteRules.Has(s.ReadyMask, i) ? "준비 완료" : "준비 대기") : s.Alive(i) ? "생존" : s.InParty(i)?"미니게임 탈락":"탈락";
+                string detail = !s.Connected(i) ? "빈 자리" : lobby ? (i==0?(RouletteRules.Has(s.ReadyMask,0)?"방장 · 연습 중":"방장"):RouletteRules.Has(s.ReadyMask, i) ? "준비 완료" : "준비 대기") : s.Alive(i) ? "생존" : s.InParty(i)?"미니게임 탈락":"탈락";
                 Vector3 anchor;
                 bool visibleName = s.Connected(i) ? manager.Table.TryGetNameViewport(i, out anchor) :
                     manager.Table.TryGetChairViewport(i, out anchor);
@@ -675,11 +724,15 @@ namespace HelloWorld
             }
             Show(digits, actionVisible);
             Show(rematch, !practice&&(hasResults || lobby) && s.Connected(seat));
-            rematch.SetEnabled(lobby && (RouletteRules.Has(s.ReadyMask,seat)||DuelLoadout.Complete(mine.SelectedItems)));
-            rematch.text = RouletteRules.Has(s.ReadyMask, seat) ? "준비 취소" : DuelLoadout.Complete(mine.SelectedItems)?"준비 완료":"아이템 2개 선택";
+            bool host=seat==0&&p.NetworkManager.IsHost;
+            int others=s.ConnectedMask&~1;
+            bool othersReady=RouletteRules.Count(s.ConnectedMask)>=2&&(s.ReadyMask&others)==others;
+            rematch.SetEnabled(lobby && (host?othersReady&&manager.CanHostStart&&DuelLoadout.Complete(mine.SelectedItems):RouletteRules.Has(s.ReadyMask,seat)||DuelLoadout.Complete(mine.SelectedItems)));
+            rematch.text=host?(DuelLoadout.Complete(mine.SelectedItems)?"게임 시작":"아이템 2개 선택"):
+                RouletteRules.Has(s.ReadyMask, seat) ? "준비 취소" : DuelLoadout.Complete(mine.SelectedItems)?"준비 완료":"아이템 2개 선택";
             Show(result, !actionVisible);
             if (s.Stage == DuelStage.Countdown)
-            { turn.text = $"시작까지  {Mathf.Max(1, Mathf.CeilToInt((float)(DuelDirector.CountdownDuration - now + s.StageStartedAt)))}"; result.text = "전원 준비 완료"; }
+            { turn.text = $"시작까지  {Mathf.Max(1, Mathf.CeilToInt((float)(DuelDirector.CountdownDuration - now + s.StageStartedAt)))}"; result.text = "게임 시작"; }
             else if (actionVisible)
             {
                 turn.text = WeaponActionName(predicted.Weapon,predicted.Action);
@@ -698,11 +751,11 @@ namespace HelloWorld
             else if (lobby)
             {
                 int participants = RouletteRules.Count(s.ConnectedMask);
-                turn.text = "파티 모드 · " + (participants >= 2 ? "모두 준비하면 시작합니다" : "참가자를 기다리는 중");
-                result.text = $"준비 {RouletteRules.Count(s.ReadyMask)} / {participants} · " +
-                    (participants >= 2 ? $"현재 {participants}명 전원 준비 시 시작" : "2명 이상부터 시작 가능");
-                if(s.Mode==DuelMode.PvP&&manager.RoomCode.Length>0)result.text+=$" · 방 코드 {manager.RoomCode}";
-                else if (s.Mode == DuelMode.PvP && manager.SessionPort > 0) result.text += $" · 접속 포트 {manager.SessionPort}";
+                turn.text = "파티 모드 · " + (participants >= 2 ? "참가자 준비 후 방장이 시작" : "참가자를 기다리는 중");
+                result.text = $"준비 {RouletteRules.Count(s.ReadyMask&others)} / {RouletteRules.Count(others)} · " +
+                    (participants >= 2 ? "참가자 전원 준비 시 시작 가능" : "2명 이상부터 시작 가능");
+                if(RouletteRules.Has(s.ReadyMask,seat)&&!DuelLoadout.Complete(mine.SelectedItems))result.text="준비를 취소하고 아이템 2개를 선택해 주세요.";
+                else if(host&&othersReady&&!manager.CanHostStart)result.text=DuelLoadout.Complete(mine.SelectedItems)?"참가자의 아이템 선택 또는 입장을 확인해 주세요.":"아이템 2개를 선택해 주세요.";
             }
             else { turn.text = ""; result.text = ""; }
         }
@@ -821,7 +874,7 @@ namespace HelloWorld
                 clockTimer.text=finalist?(memory.Winner>=0?$"{s.NameForSeat(memory.Winner)} 1등":"승자 없음 · 다음 게임으로"):eliminatedCount>1?$"{eliminatedCount}명 탈락":eliminated>=0?$"{s.NameForSeat(eliminated)} 탈락":"전원 정답";
                 miniInstruction.text=finalist?(memory.Winner>=0?"1등에게 사격 기회가 주어집니다.":"다음 미니게임으로 진행합니다."):eliminated>=0?"남은 참가자는 다음 라운드로 진행합니다.":"다음 라운드는 방향이 하나 늘어납니다.";
                 var order=new System.Collections.Generic.List<int>();
-                int mask=finalist?clock.ParticipantsMask:memory.RoundMask;
+                int mask=memory.RoundMask;
                 for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(mask,i))order.Add(i);
                 order.Sort((a,b)=>finalist?
                     (memory.ForSeat(a).Rank==0?int.MaxValue:memory.ForSeat(a).Rank).CompareTo(memory.ForSeat(b).Rank==0?int.MaxValue:memory.ForSeat(b).Rank):
@@ -871,6 +924,12 @@ namespace HelloWorld
             if(p==null)feedback?.Reset();else feedback?.Observe(p.State.Value,p.Seat.Value,p.NetworkManager.ServerTime.Time);
             if(UpdateDice(p))
             {Show(clockPanel,false);Show(quickStartLayer,false);Show(manualSelection,false);Show(itemRow,false);Show(partySelection,false);Show(shootingNotice,false);return;}
+            if(p!=null&&p.State.Value.IsPracticing(p.Seat.Value))
+            {
+                Show(clockPanel,false);Show(quickStartLayer,false);Show(manualSelection,false);Show(partySelection,false);Show(shootingNotice,false);
+                UpdatePracticeItems(p);return;
+            }
+            itemRow.EnableInClassList("practice-items",false);
             Show(memoryScroll,false);clockPanel.EnableInClassList("memory-panel",false);
             bool visible=p!=null && p.State.Value.Phase==DuelPhase.Playing && p.State.Value.Stage==DuelStage.Racing && p.State.Value.Clock.Phase!=ClockPhase.QuickHands;
             bool manual=visible&&p.State.Value.ManualMiniGame&&p.State.Value.Clock.Phase==ClockPhase.Selecting;
@@ -879,36 +938,44 @@ namespace HelloWorld
             {manualRound=p.State.Value.Round;manualIteration=p.State.Value.Clock.Iteration;BuildManualChoices();}
             bool itemTime=visible&&p.State.Value.Clock.Phase==ClockPhase.ItemPreparation&&p.State.Value.Alive(p.Seat.Value);
             bool liveInk=LiveInkTime(p);
+            bool liveBullet=liveInk&&p.State.Value.Clock.First==p.Seat.Value&&p.State.Value.Clock.MiniGame!=PartyMiniGame.QuickHands;
             var inventory=visible||liveInk?p.State.Value.ForSeat(p.Seat.Value):default;
             bool recoverySpent=inventory.LoadoutLocked&&DuelLoadout.Has(inventory.SelectedItems,DuelItem.Recovery)&&!inventory.HasRecovery;
             bool recoveryUsed=recoverySpent||itemTime&&inventory.HealAt>=0&&inventory.HealAt>=p.State.Value.Clock.PhaseAt;
-            Show(itemRow,itemTime&&(inventory.HasRecovery||inventory.HasTaser||recoverySpent||inventory.Ink.Owned||inventory.BulletItems>0||inventory.HasNoruFace)||liveInk&&inventory.Ink.Owned);
+            Show(itemRow,itemTime&&(inventory.HasRecovery||inventory.HasTaser||recoverySpent||inventory.Ink.Owned||inventory.BulletItems>0||inventory.HasNoruFace)||liveInk&&inventory.Ink.Owned||liveBullet&&(inventory.BulletItems>0||inventory.BulletUsed));
             if(visible||liveInk)
             {
                 var a=inventory;var c0=p.State.Value.Clock;
                 Show(itemButtons[0],itemTime&&(a.HasRecovery||recoverySpent));Show(itemButtons[1],itemTime&&a.HasTaser);
-                Show(itemButtons[3],itemTime&&a.BulletItems>0);
-                itemButtons[3].SetEnabled(itemTime&&c0.MiniGame!=PartyMiniGame.QuickHands&&c0.First==p.Seat.Value&&a.BulletItems>0&&!a.BulletUsed&&!a.Stunned);
+                Show(itemButtons[3],(itemTime||liveBullet)&&(a.BulletItems>0||a.BulletUsed));
+                itemButtons[3].SetEnabled((itemTime||liveBullet&&a.FiredAt<c0.PhaseAt)&&c0.MiniGame!=PartyMiniGame.QuickHands&&c0.First==p.Seat.Value&&a.BulletItems>0&&!a.BulletUsed&&!a.Stunned);
                 itemButtons[3].EnableInClassList("item-used",a.BulletUsed);
-                itemStatuses[3].text=$"{a.BulletItems}개";Show(itemStatuses[3],itemTime&&a.BulletItems>0);
+                itemStatuses[3].text=$"{a.BulletItems}개";Show(itemStatuses[3],(itemTime||liveBullet)&&(a.BulletItems>0||a.BulletUsed));
                 UpdateInkItem(p,itemTime,liveInk);
                 bool quickPrep=c0.MiniGame==PartyMiniGame.QuickHands;
                 Show(itemButtons[4],itemTime&&a.HasNoruFace);
-                int noruCooldown=p.State.Value.UnlimitedItems?0:System.Math.Max(0,a.NoruFaceReadyIteration-c0.Iteration-(a.NoruFaceActive?1:0));
+                int noruCooldown=p.State.Value.NoCooldownFor(p.Seat.Value)?0:System.Math.Max(0,a.NoruFaceReadyIteration-c0.Iteration-(a.NoruFaceActive?1:0));
                 itemButtons[4].SetEnabled(itemTime&&a.HasNoruFace&&!a.NoruFaceActive&&!a.Stunned&&noruCooldown==0&&(!quickPrep||a.QuickItem==0&&!a.QuickSpent));
                 itemButtons[4].EnableInClassList("item-used",a.NoruFaceActive);
                 itemButtons[4].EnableInClassList("item-cooldown",!a.NoruFaceActive&&noruCooldown>0);
                 itemStatuses[4].text=!a.NoruFaceActive&&noruCooldown>0?$"{noruCooldown}게임 뒤 사용가능":"";
                 Show(itemStatuses[4],itemTime&&!a.NoruFaceActive&&noruCooldown>0);
                 itemButtons[0].SetEnabled(a.HasRecovery&&a.Health<100&&(!quickPrep||a.QuickItem==0));bool eligible=quickPrep||c0.First>=0&&c0.First!=p.Seat.Value;
-                itemButtons[1].SetEnabled(a.HasTaser&&!a.TaserArmed&&(p.State.Value.UnlimitedItems||c0.Iteration>=a.TaserReadyIteration)&&eligible&&(!quickPrep||!a.QuickSpent));
+                itemButtons[1].SetEnabled(a.HasTaser&&!a.TaserArmed&&(p.State.Value.NoCooldownFor(p.Seat.Value)||c0.Iteration>=a.TaserReadyIteration)&&eligible&&(!quickPrep||!a.QuickSpent));
                 itemButtons[1].EnableInClassList("item-used",a.TaserArmed||quickPrep&&a.QuickItem==2);
                 itemButtons[0].EnableInClassList("item-spent",recoveryUsed);Show(recoveryUsedMark,recoveryUsed);
                 itemStatuses[0].text=recoveryUsed?"사용완료":"";Show(itemStatuses[0],recoveryUsed);
-                int cooldown=p.State.Value.UnlimitedItems?0:System.Math.Max(0,a.TaserReadyIteration-c0.Iteration-(a.TaserArmed?1:0));
+                int cooldown=p.State.Value.NoCooldownFor(p.Seat.Value)?0:System.Math.Max(0,a.TaserReadyIteration-c0.Iteration-(a.TaserArmed?1:0));
                 itemButtons[1].EnableInClassList("item-cooldown",!a.TaserArmed&&cooldown>0);
                 itemStatuses[1].text=!a.TaserArmed&&cooldown>0?$"{cooldown}게임 뒤 사용가능":"";
                 Show(itemStatuses[1],!a.TaserArmed&&cooldown>0);
+                if(itemTime)
+                    for(int i=0;i<itemButtons.Length;i++)
+                    {
+                        bool chosen=a.PreparedItem==i+1;
+                        if(a.PreparedItem!=0)itemButtons[i].SetEnabled(chosen);
+                        itemButtons[i].EnableInClassList("item-used",chosen);
+                    }
             }
             bool starting=visible && (p.State.Value.Clock.Phase==ClockPhase.QuickCountdown ||
                 p.State.Value.Clock.Phase==ClockPhase.Counting&&p.State.Value.Clock.MiniGame==PartyMiniGame.Greed&&p.NetworkManager.ServerTime.Time<p.State.Value.Clock.StartedAt);
@@ -932,13 +999,13 @@ namespace HelloWorld
                 if(reelRound!=s.Round || reelIteration!=c.Iteration)
                 {reelRound=s.Round;reelIteration=c.Iteration;reelIndex=index;reelStopped=t>=1;}
                 if(t<1 && index!=reelIndex)
-                {reelSound.pitch=Mathf.Lerp(1.15f,.85f,t);reelSound.PlayOneShot(reelTickSound,.7f);}
+                {reelSound.pitch=Mathf.Lerp(1.15f,.85f,t);reelSound.PlayOneShot(reelTickSound,.7f*DuelSettings.Effects);}
                 if(t>=1 && !reelStopped)
-                {reelStopped=true;reelSound.pitch=1;reelSound.PlayOneShot(reelStopSound);}
+                {reelStopped=true;reelSound.pitch=1;reelSound.PlayOneShot(reelStopSound,DuelSettings.Effects);}
                 reelIndex=index;
                 partyReel.style.translate=new Translate(0,-60-(travel-index)*60,0);
                 for(int i=0;i<partyReelLabels.Length;i++)
-                {partyReelLabels[i].text=PartyGames.Name(PartyGames.At(index+i));partyReelLabels[i].style.opacity=Mathf.Lerp(.25f,1,1-Mathf.Clamp01(Mathf.Abs(i-2-(travel-index))));}
+                {var game=PartyGames.At(index+i);float opacity=Mathf.Lerp(.25f,1,1-Mathf.Clamp01(Mathf.Abs(i-2-(travel-index))));partyReelLabels[i].text=PartyGames.Name(game);partyReelLabels[i].style.opacity=opacity;partyReelStrikes[i].style.opacity=opacity;Show(partyReelStrikes[i],(c.PlayedMask&PartyGames.Bit(game))!=0);}
                 partySelectionTitle.text=t<1?"미니게임 선택 중":"선택된 미니게임";
                 partySelection.EnableInClassList("selected",t>=1);return;
             }
@@ -986,8 +1053,8 @@ namespace HelloWorld
             }
             else if(c.Phase==ClockPhase.QuickResults)
             {
-                clockTitle.text=c.First>=0&&s.Connected(c.First)?$"{s.NameForSeat(c.First)} · 대난투 승리":"대난투 종료";
-                clockTimer.text="사망한 참가자는 목숨을 하나 잃었습니다.";
+                clockTitle.text=c.First>=0&&s.Connected(c.First)?$"{s.NameForSeat(c.First)}가 대난투에서 살아남았습니다":"대난투 종료";
+                clockTimer.text="";
                 clockRanking.text=$"목숨이 남은 참가자는 회복하고 다음 미니게임에 참가합니다.\n선택까지 {System.Math.Max(0,DuelClockContest.QuickResultsDuration-(now-c.PhaseAt)):F1}초";
             }
             else if(c.Phase==ClockPhase.Ranking)
@@ -1010,7 +1077,7 @@ namespace HelloWorld
             else if(c.Phase==ClockPhase.ItemPreparation)
             {clockTitle.text="아이템 사용";clockTimer.text=$"{System.Math.Max(0,c.StartedAt-now):F1}초";}
             else if(c.Phase==ClockPhase.Shooting)
-            {clockTitle.text="사격 시간";clockTimer.text=s.ShotTimeLimit==0?"무제한":$"{System.Math.Max(0,s.ShotTimeLimit-(now-c.PhaseAt)):F1}초";}
+            {float limit=s.ShotLimitFor(c.First);clockTitle.text="사격 시간";clockTimer.text=limit==0?"무제한":$"{System.Math.Max(0,limit-System.Math.Max(0,now-DuelClockContest.ShootingStartsAt(c))):F1}초";}
             else {clockTitle.text="다음 미니게임 준비";clockTimer.text=$"선택까지 {System.Math.Max(0,DuelClockContest.ReturnDuration-(now-c.PhaseAt)):F1}초";}
         }
         private static string ResultRecord(PartyMiniGame game,ClockEntry e)
@@ -1106,6 +1173,7 @@ namespace HelloWorld
                 {
                     announcedVictoryRound = state.Round;
                     victoryShownAt = hadPlayer ? now : now - ResultsStart - 0.1;
+                    resultCueMask=hadPlayer?0:7;
                     victoryText.text = state.Results.Winner<0?"전원 탈락":state.Results.ForSeat(state.Results.Winner).Name.ToString() + " 최종 승리";
                     victoryText.RemoveFromClassList("death-banner");
                     victoryExpiresAt = 0;
@@ -1117,11 +1185,19 @@ namespace HelloWorld
                 victoryText.style.translate = new Translate(0, (64 - height * .5f) * rise, 0);
                 Show(victoryLayer, true); victoryLayer.style.opacity = 1;
                 double elapsed = now - victoryShownAt;
+                if(elapsed>=0&&(resultCueMask&1)==0){resultCueMask|=1;feedback?.ResultCue(0);}
+                if(elapsed>=HighlightStart&&(resultCueMask&2)==0){resultCueMask|=2;feedback?.ResultCue(1);}
+                if(elapsed>=ResultsStart&&(resultCueMask&4)==0){resultCueMask|=4;feedback?.ResultCue(2);}
                 Show(highlightLayer, elapsed >= HighlightStart);
                 float factRise = Mathf.Clamp01((float)((elapsed - HighlightStart - HighlightHold) / HighlightRise));
                 factRise = factRise * factRise * (3 - 2 * factRise);
                 highlightText.style.translate = new Translate(0, (152 - height * .5f) * factRise, 0);
                 Show(resultsLayer, elapsed >= ResultsStart);
+                float footer=Mathf.Clamp01((float)((elapsed-ResultsStart-ResultFooterDelay)/ResultFooterDuration));
+                footer=footer*footer*(3-2*footer);
+                resultsFooter.style.maxHeight=450*footer;resultsFooter.style.opacity=footer;
+                resultsFooter.style.translate=new Translate(0,-18*(1-footer),0);
+                resultsFooter.SetEnabled(footer>=.999f);
                 UpdateResults(state);
                 return;
             }
@@ -1131,6 +1207,7 @@ namespace HelloWorld
             if(owner!=null && owner.IsSpawned && state.ForSeat(owner.Seat.Value).DeathCause==DuelDeathCause.ClockTimeout && (announcedTimeoutRound!=state.Round||deathBannerLife!=state.ForSeat(owner.Seat.Value).Life))
             {announcedTimeoutRound=state.Round;deathBannerLife=state.ForSeat(owner.Seat.Value).Life;victoryText.text=DeathMessage("초읽기 시간 초과",state.ForSeat(owner.Seat.Value).LivesRemaining);victoryText.AddToClassList("death-banner");victoryExpiresAt=now+4;}
             Show(resultsLayer, false);
+            resultsFooter.style.maxHeight=StyleKeyword.None;resultsFooter.style.opacity=1;resultsFooter.style.translate=new Translate(0,0,0);resultsFooter.SetEnabled(true);
             Show(highlightLayer, false);
             victoryText.style.translate = new Translate(0, 0, 0);
             float remaining = (float)(victoryExpiresAt - Time.realtimeSinceStartupAsDouble);
@@ -1163,7 +1240,13 @@ namespace HelloWorld
             }
             int participants = RouletteRules.Count(state.ConnectedMask);
             resultsReady.text = state.Stage != DuelStage.Idle ? "경기 종료 중…" : participants < 2 ? "참가자를 기다리는 중" :
-                $"준비 {RouletteRules.Count(state.ReadyMask)} / {participants}";
+                $"참가자 준비 {RouletteRules.Count(state.ReadyMask&state.ConnectedMask&~1)} / {participants-1}";
+            var local=HelloWorldPlayer.Local;
+            if(local!=null&&local.IsSpawned&&RouletteRules.Has(state.ReadyMask,local.Seat.Value)&&!DuelLoadout.Complete(state.ForSeat(local.Seat.Value).SelectedItems))
+                resultsReady.text="준비를 취소하고 아이템 2개를 선택해 주세요.";
+            else if(local!=null&&local.IsSpawned&&local.Seat.Value==0&&state.Stage==DuelStage.Idle&&participants>=2&&
+                (state.ReadyMask&state.ConnectedMask&~1)==(state.ConnectedMask&~1)&&!manager.CanHostStart)
+                resultsReady.text=DuelLoadout.Complete(state.ForSeat(0).SelectedItems)?"참가자의 아이템 선택 또는 입장을 확인해 주세요.":"아이템 2개를 선택해 주세요.";
         }
         private static string DeathMessage(string cause,int remainingLives)=>
             (remainingLives>0?"목숨을 잃었습니다!":"사망했습니다!")+"\n사인 ("+cause+")\n남은 목숨: "+remainingLives;
@@ -1207,7 +1290,7 @@ namespace HelloWorld
             while (kills.Count > 0 && kills.Peek().ExpiresAt <= now) kills.Dequeue().Row.RemoveFromHierarchy();
             foreach (var entry in kills) entry.Row.style.opacity = Mathf.Clamp01((float)(entry.ExpiresAt - now));
         }
-        private static Texture2D MakeWeaponIcon(DuelWeapon weapon)
+        private static Texture2D MakeWeaponIcon(DuelWeapon weapon,bool readable=false)
         {
             const int width = 96, height = 48;
             var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
@@ -1220,7 +1303,7 @@ namespace HelloWorld
                 {
                     bool rifle=(x>=33&&x<=67&&y>=23&&y<=29)||(x>=61&&x<=93&&y>=27&&y<=30);
                     bool stock=x>=3&&x<=34&&y>=13+(x-3)*.18f&&y<=24+(x-3)*.16f;
-                    bool optic=x>=30&&x<=64&&y>=34&&y<=39||(x>=34&&x<=38||x>=56&&x<=60)&&y>=29&&y<=35;
+                    bool optic=(x>=35&&x<=38||x>=86&&x<=88)&&y>=30&&y<=33;
                     float ring=Mathf.Pow((x-34)/12f,2)+Mathf.Pow((y-18)/6f,2);
                     if(rifle||stock||optic||ring<=1&&ring>=.65f)pixels[y*width+x]=new Color(.9f,.86f,.7f,1);
                     continue;
@@ -1241,7 +1324,7 @@ namespace HelloWorld
                     if(!flute)pixels[y * width + x] = new Color(.9f, .86f, .7f, 1);
                 }
             }
-            texture.SetPixels(pixels); texture.Apply(false, true); return texture;
+            texture.SetPixels(pixels); texture.Apply(false, !readable); return texture;
         }
         private static bool IsUnderAim(DuelSnapshot state, int seat)
         {
@@ -1252,7 +1335,7 @@ namespace HelloWorld
             {
                 var action = state.ForSeat(i);
                 if (i != seat && state.Connected(i) && (practice?state.IsPracticing(i):state.Alive(i)) && action.Target == seat &&
-                    action.Weapon!=DuelWeapon.Taser && action.Ammo>0 && action.Aiming) return true;
+                    action.Weapon!=DuelWeapon.Taser && action.Ammo>0 && (practice||state.Clock.Phase==ClockPhase.QuickHands||state.Clock.Phase==ClockPhase.Shooting)) return true;
             }
             return false;
         }
@@ -1284,7 +1367,7 @@ namespace HelloWorld
             }
             var clip=AudioClip.Create(stop?"Mini-game selected":"Mini-game reel tick",data.Length,1,rate,false);clip.SetData(data,0);return clip;
         }
-        private void OnDestroy() { if(inkTexture!=null)Destroy(inkTexture); if(basScopeTexture!=null)Destroy(basScopeTexture); if(headshotIcon!=null)Destroy(headshotIcon);if(legshotIcon!=null)Destroy(legshotIcon);if (font != null) Destroy(font);if(reelTickSound!=null)Destroy(reelTickSound);if(reelStopSound!=null)Destroy(reelStopSound); if (aimVignette != null) Destroy(aimVignette); if(scopeVignette!=null)Destroy(scopeVignette);if(hitVignette!=null)Destroy(hitVignette); foreach (var icon in weaponIcons) if (icon != null) Destroy(icon);foreach(var icon in itemIcons)if(icon!=null)Destroy(icon);if(healTexture!=null)Destroy(healTexture);if(electricTexture!=null)Destroy(electricTexture); }
+        private void OnDestroy() { DuelSettings.WindowOpen=false; DestroyRareItemTextures(); DestroyGacha(); if(attendanceOpenSound!=null)Destroy(attendanceOpenSound);if(attendanceRewardSound!=null)Destroy(attendanceRewardSound);if(goldCoinIcon!=null)Destroy(goldCoinIcon);if(inkTexture!=null)Destroy(inkTexture); if(basScopeTexture!=null)Destroy(basScopeTexture); if(headshotIcon!=null)Destroy(headshotIcon);if(legshotIcon!=null)Destroy(legshotIcon);if (font != null) Destroy(font);if(reelTickSound!=null)Destroy(reelTickSound);if(reelStopSound!=null)Destroy(reelStopSound); if (aimVignette != null) Destroy(aimVignette); if(scopeVignette!=null)Destroy(scopeVignette);if(hitVignette!=null)Destroy(hitVignette); foreach (var icon in weaponIcons) if (icon != null) Destroy(icon);foreach(var icon in itemIcons)if(icon!=null)Destroy(icon);foreach(var icon in itemInfoIcons)if(icon!=null)Destroy(icon);if(healTexture!=null)Destroy(healTexture);if(electricTexture!=null)Destroy(electricTexture); }
     }
 }
 

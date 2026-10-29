@@ -63,7 +63,7 @@ public sealed class InkRuntimeQA:MonoBehaviour
     void Target(int actor,int target,out float yaw,out float pitch)
     {
         var delta=DuelGunplay.Point(target,DuelHitPart.Head)-DuelGunplay.Eye(actor);float distance=Mathf.Sqrt(delta.X*delta.X+delta.Z*delta.Z),t=(distance-.65f)/DuelInk.Speed;
-        DuelGunplay.Angles(delta,out yaw,out pitch);yaw-=Mathf.Atan2(.24f,distance)*Mathf.Rad2Deg;
+        DuelGunplay.Angles(delta,out yaw,out pitch);
         pitch=Mathf.Atan2(delta.Y+.1f-DuelInk.UpwardSpeed*t+.5f*DuelInk.Gravity*t*t,distance)*Mathf.Rad2Deg;
     }
     void Model()

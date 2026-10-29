@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
@@ -57,7 +57,7 @@ public sealed class AdsRulesRuntimeQA:MonoBehaviour
         for(int i=0;i<=20;i++)
         {
             float revolver=DuelGunplay.PrecisionSpreadRadius(DuelWeapon.Revolver,false,i/20.0),sniper=DuelGunplay.PrecisionSpreadRadius(DuelWeapon.BAS,false,i/20.0);
-            Check(revolver==sniper&&revolver>=35&&revolver<=70,"identical centre-excluding hip radius sample "+i);
+            Check(revolver==0&&sniper==0,"accurate normal fire sample "+i);
             Check(DuelGunplay.PrecisionSpreadRadius(DuelWeapon.Revolver,true,i/20.0)==0&&DuelGunplay.PrecisionSpreadRadius(DuelWeapon.BAS,true,i/20.0)==0,"ADS adds no random spread "+i);
         }
         foreach(var weapon in new[]{DuelWeapon.Revolver,DuelWeapon.BAS})
@@ -65,7 +65,7 @@ public sealed class AdsRulesRuntimeQA:MonoBehaviour
             foreach(bool practice in new[]{false,true})
             {
                 var d=PrecisionSetup(weapon,practice);Check(d.Fire(0,0,0,false,d.ForSeat(0).Version,10.2,10.2),"actual hip fire accepted "+weapon+" practice="+practice);
-                var a=d.ForSeat(0);Check(Mathf.Abs(OffsetRadius(a,0)-70*Mathf.Sqrt(.625f))<.001f&&!a.FiredAds&&a.FiredSpread==0,"actual server hip annulus without sway "+weapon+" practice="+practice);
+                var a=d.ForSeat(0);Check(OffsetRadius(a,0)==0&&!a.FiredAds&&a.FiredSpread==0,"actual server normal fire follows centre "+weapon+" practice="+practice);
             }
             var ads=PrecisionSetup(weapon,false);Check(ads.Fire(0,0,0,true,ads.ForSeat(0).Version,10.2,10.2),"actual ADS fire accepted "+weapon);
             DuelGunplay.Sway(0,weapon,true,10.2,10.2,out float y,out float p);Check(Mathf.Abs(ads.ForSeat(0).FiredYaw-y)<.001f&&Mathf.Abs(ads.ForSeat(0).FiredPitch-p)<.001f,"ADS follows weapon sway exactly "+weapon);
@@ -76,13 +76,13 @@ public sealed class AdsRulesRuntimeQA:MonoBehaviour
         for(int seat=0;seat<6;seat++)foreach(DuelWeapon w in Enum.GetValues(typeof(DuelWeapon)))
         {
             DuelGunplay.Sway(seat,w,false,13.7,0,out var y,out var p);Check(y==0&&p==0,"hip sway disabled: "+seat+"/"+w);
-            DuelGunplay.Sway(seat,w,true,13.7,0,out y,out p);Check(w==DuelWeapon.SawedOff?y==0&&p==0:Math.Abs(y)+Math.Abs(p)>.01,"ADS sway respects capability: "+seat+"/"+w);
+            DuelGunplay.Sway(seat,w,true,13.7,0,out y,out p);Check(y==0&&p==0,"ADS sway disabled: "+seat+"/"+w);
         }
-        Check(!WeaponRules.SupportsAds(DuelWeapon.SawedOff)&&WeaponRules.SupportsAds(DuelWeapon.Revolver)&&WeaponRules.SupportsAds(DuelWeapon.BAS),"ADS capability");
+        Check(!WeaponRules.SupportsAds(DuelWeapon.SawedOff)&&!WeaponRules.SupportsAds(DuelWeapon.Revolver)&&!WeaponRules.SupportsAds(DuelWeapon.Taser)&&WeaponRules.SupportsAds(DuelWeapon.BAS),"ADS capability");
         Check(DuelGunplay.Spread(DuelWeapon.SawedOff,false)==6&&DuelGunplay.Spread(DuelWeapon.SawedOff,true)==6,"shotgun fixed spread regardless of submitted flag");
         Check(DuelGunplay.ShotRange(DuelWeapon.SawedOff,false)==20&&DuelGunplay.ShotRange(DuelWeapon.SawedOff,true)==20,"shotgun fixed range");
         Check(DuelGunplay.AdsFov(DuelWeapon.SawedOff)==75,"shotgun has no zoom");
-        Check(DuelGunplay.Spread(DuelWeapon.Revolver,false)==70&&DuelGunplay.Spread(DuelWeapon.BAS,false)==70&&DuelGunplay.Spread(DuelWeapon.Revolver,true)==0&&DuelGunplay.Spread(DuelWeapon.BAS,true)==0,"precision hip penalty and ADS accuracy preserved");
+        Check(DuelGunplay.Spread(DuelWeapon.Revolver,false)==0&&DuelGunplay.Spread(DuelWeapon.BAS,false)==0&&DuelGunplay.Spread(DuelWeapon.Revolver,true)==0&&DuelGunplay.Spread(DuelWeapon.BAS,true)==0,"single bullets remain accurate with either input flag");
         var centre=DuelGunplay.Direction(0,0);Check(DuelGunplay.MuzzleOrigin(0,DuelWeapon.SawedOff,true,centre).Equals(DuelGunplay.MuzzleOrigin(0,DuelWeapon.SawedOff,false,centre)),"shotgun cannot move ballistic origin via ADS flag");
         Check(!DuelGunplay.PelletDirection(centre,6,0,1).Equals(DuelGunplay.PelletDirection(centre,6,0,2)),"new shotgun seeds change pellet pattern");
         DuelGunplay.Angles(DuelGunplay.Point(3,DuelHitPart.Body)-DuelGunplay.Eye(0),out float yaw,out float pitch);centre=DuelGunplay.Direction(yaw,pitch);
@@ -96,7 +96,32 @@ public sealed class AdsRulesRuntimeQA:MonoBehaviour
         Check(a.Action==DuelAction.OpenBarrel&&a.Ammo==0&&a.SpentMask==1,"shotgun reload cycle unchanged");
         var ai=Setup(DuelMode.AI);for(int i=0;i<600&&ai.ForSeat(1).ShotsFired<2;i++)ai.Tick(10.1+i*.08);
         Check(ai.ForSeat(1).ShotsFired>=2,"shotgun AI aims and fires again without ADS state");
-        PrecisionRules();DuelHighlightsChecks.Validate();Check(true,"existing factual highlights threshold and serialization regression");
+        PrecisionRules();AimWarnings();DuelHighlightsChecks.Validate();Check(true,"existing factual highlights threshold and serialization regression");
+    }
+    void AimWarnings()
+    {
+        foreach(var weapon in WeaponRules.Selectable)
+        {
+            var d=PrecisionSetup(weapon,false);DuelGunplay.Angles(DuelGunplay.Point(1,DuelHitPart.Head)-DuelGunplay.Eye(0),out float y,out float p);
+            Check(d.Look(0,y,p,false,10.2)&&d.ForSeat(0).Target==1&&!d.ForSeat(0).Aiming,"normal look targets opponent "+weapon);
+            var state=new DuelSnapshot{ConnectedMask=7,AliveMask=7,Phase=DuelPhase.Playing,Stage=DuelStage.Racing,Clock=d.Clock,Seat0=d.ForSeat(0),Seat1=d.ForSeat(1),Seat2=d.ForSeat(2)};
+            var warning=typeof(RouletteView).GetMethod("IsUnderAim",BindingFlags.Static|BindingFlags.NonPublic);
+            Check((bool)warning.Invoke(null,new object[]{state,1}),"victim warning without ADS "+weapon);
+            state.Clock.Phase=ClockPhase.Ranking;Check(!(bool)warning.Invoke(null,new object[]{state,1}),"warning ends outside shooting "+weapon);
+            Check(d.Look(0,0,0,false,10.3)&&d.ForSeat(0).Target<0,"looking away clears warning "+weapon);
+            Check(d.Look(0,y,p,false,10.4)&&d.ForSeat(0).Target==1,"target can return "+weapon);d.Tick(10.8);Check(d.ForSeat(0).Target<0,"stale normal look expires "+weapon);
+        }
+        var partial=PrecisionSetup(DuelWeapon.Revolver,false);var actions=Field<DuelActionState[]>(partial,"actions");actions[0].Action=DuelAction.Load;actions[0].LoadedMask=0;actions[0].SpentMask=0;actions[0].Progress=0;actions[0].ShootingStartedAt=-1;
+        for(int i=0;i<3;i++){var a=partial.ForSeat(0);Check(partial.Input(0,a.Digit(a.Progress),a.Version,10.1+i*.1),"partial cartridge digit");}
+        var loaded=partial.ForSeat(0);Check(loaded.Action==DuelAction.Load&&loaded.Ammo==1&&loaded.ShootingStartedAt>=10.1,"first cartridge is ready and timed");
+        Check(partial.Fire(0,0,0,false,loaded.Version,10.5,10.5),"partial revolver fires without ADS");
+        for(int actor=0;actor<6;actor++)for(int target=0;target<6;target++)if(actor!=target)
+        foreach(var weapon in new[]{DuelWeapon.Revolver,DuelWeapon.BAS})
+        {
+            var ray=DuelGunplay.Point(target,DuelHitPart.Head)-DuelGunplay.Eye(actor);DuelGunplay.Angles(ray,out float y,out float p);ray=DuelGunplay.Direction(y,p);
+            var shot=new DuelProjectileVolley(actor,1,1,weapon,DuelGunplay.MuzzleOrigin(actor,weapon,false,ray),ray,0,1,0);
+            Check(shot.Tick(1<<target,1,out var hit)&&hit.Seat==target&&hit.Part==DuelHitPart.Head,"view-ray head hit "+actor+"/"+target+"/"+weapon);
+        }
     }
     IEnumerator Start()
     {
@@ -113,7 +138,7 @@ public sealed class AdsRulesRuntimeQA:MonoBehaviour
             while(!Seen("client","practice"))yield return null;
             Check(!D.ForSeat(1).FiredAds&&D.ForSeat(1).FiredSpread==6,"remote practice flag normalized on server");Mark("saw-verified");
             while(!Seen("client","precision-practice"))yield return null;
-            Check(D.ForSeat(1).FiredWeapon==DuelWeapon.Revolver&&OffsetRadius(D.ForSeat(1),60)>=35&&OffsetRadius(D.ForSeat(1),60)<=70,"remote practice revolver has sniper hip spread");
+            Check(D.ForSeat(1).FiredWeapon==DuelWeapon.Revolver&&OffsetRadius(D.ForSeat(1),60)==0,"remote practice revolver follows view ray");
             D.Ready(2,Now);Racing(D,Now,7);Loaded(D,1,DuelWeapon.Revolver,Now);Publish();Mark("match");
             while(!Seen("client","match"))yield return null;Check(!D.ForSeat(1).FiredAds&&D.ForSeat(1).ShotsFired==1&&D.ForSeat(1).Ammo==0,"remote match shot authorized and consumes ammo");Mark("verified");
             while(!Seen("client","finished"))yield return null;
@@ -134,11 +159,15 @@ public sealed class AdsRulesRuntimeQA:MonoBehaviour
             InputState.Change(mouse,new MouseState());mouse.MakeCurrent();player.Rematch();while(player.State.Value.IsPracticing(1))yield return null;
             player.SelectWeapon(DuelWeapon.Revolver);while(player.State.Value.Seat1.SelectedWeapon!=DuelWeapon.Revolver)yield return null;
             player.Rematch();while(!player.State.Value.IsPracticing(1))yield return null;
+            InputState.Change(mouse,new MouseState{buttons=2});mouse.MakeCurrent();yield return new WaitForSecondsRealtime(.2f);
+            Check(!fps.Ads&&Camera.main.fieldOfView==DuelGunplay.BaseFov,"revolver right mouse keeps normal view");
+            player.Look(60,0,true);yield return new WaitForSecondsRealtime(.2f);Check(!player.State.Value.Seat1.Aiming,"server rejects revolver ADS");
+            InputState.Change(mouse,new MouseState());mouse.MakeCurrent();
             int previous=player.State.Value.Seat1.PracticeShotsFired;player.Fire(60,0,false,Now);while(player.State.Value.Seat1.PracticeShotsFired<=previous)yield return null;
-            Check(!player.State.Value.Seat1.FiredAds&&OffsetRadius(player.State.Value.Seat1,60)>=35&&OffsetRadius(player.State.Value.Seat1,60)<=70,"remote owner practice revolver excludes centre");Mark("precision-practice");
+            Check(!player.State.Value.Seat1.FiredAds&&OffsetRadius(player.State.Value.Seat1,60)==0,"remote owner practice revolver follows centre");Mark("precision-practice");
             while(!Seen("host","match")||player.State.Value.Clock.Phase!=ClockPhase.QuickHands||player.State.Value.Seat1.Ammo!=1)yield return null;
             player.Fire(60,0,false,Now);while(player.State.Value.Seat1.ShotsFired==0)yield return null;
-            Check(!player.State.Value.Seat1.FiredAds&&OffsetRadius(player.State.Value.Seat1,60)>=35&&OffsetRadius(player.State.Value.Seat1,60)<=70,"normal remote revolver shot uses sniper hip spread");Mark("match");
+            Check(!player.State.Value.Seat1.FiredAds&&OffsetRadius(player.State.Value.Seat1,60)==0,"normal remote revolver shot follows centre");Mark("match");
             while(!Seen("host","verified"))yield return null;Mark("finished");
         }
     }

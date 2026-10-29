@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 namespace HelloWorld
 {
     public sealed partial class DuelDirector
@@ -8,7 +8,7 @@ namespace HelloWorld
         {
             if(seat<0||seat>=actions.Length||Stage!=DuelStage.Racing||Game.Phase!=DuelPhase.Playing||!RouletteRules.Has(Game.AliveMask,seat)||actions[seat].Stunned||!DuelInk.Usable(clock.State.Phase))return false;
             if(clock.State.Phase==ClockPhase.ItemPreparation)return now<clock.State.StartedAt;
-            if(clock.State.Phase==ClockPhase.Shooting&&Game.ShotTimeLimit>0&&now>=clock.State.PhaseAt+Game.ShotTimeLimit)return false;
+            if(clock.State.Phase==ClockPhase.Shooting&&ShotLimitFor(clock.State.First)>0&&now>=DuelClockContest.ShootingStartsAt(clock.State)+ShotLimitFor(clock.State.First))return false;
             return !shotOpportunitySpent||QuickHandsActive;
         }
         private bool UseInk(int seat,int iteration,double now)
@@ -21,16 +21,17 @@ namespace HelloWorld
         }
         public bool ThrowInk(int seat,float yaw,float pitch,int iteration,int life,int version,double sample,double now)
         {
-            if(!CanUseInk(seat,now)||!DuelInk.Shooting(clock.State.Phase)||iteration!=clock.State.Iteration||life!=actions[seat].Life||
+            if(seat>=0&&seat<actions.Length&&IsPracticing(seat))return ThrowPracticeInk(seat,yaw,pitch,iteration,life,version,sample,now);
+            if(!CanUseInk(seat,now)||actions[seat].PreparedItem!=(int)DuelItem.Ink+1||!DuelInk.Shooting(clock.State.Phase)||iteration!=clock.State.Iteration||life!=actions[seat].Life||
                 !DuelGunplay.ValidSeatAngles(seat,yaw,pitch)||double.IsNaN(sample)||double.IsInfinity(sample)||sample<now-.3||sample>now+.05)return false;
             var ink=actions[seat].Ink;
             if(QuickHandsActive&&(actions[seat].QuickItem!=3||!actions[seat].QuickEquipped||actions[seat].QuickSpent))return false;
             if(!ink.Owned||!ink.Armed||ink.Version!=version||inkFlights[seat]!=null)return false;
-            ink.Armed=false;if(!Game.UnlimitedItems)ink.Owned=false;
+            ink.Armed=false;if(!UnlimitedFor(seat))ink.Owned=false;
             ink.Version++;ink.Serial++;ink.ThrownAt=now;ink.ImpactAt=-1;ink.Target=-1;
             ink.Origin=DuelInk.ThrowOrigin(seat,yaw,pitch);ink.Direction=DuelGunplay.Direction(yaw,pitch);
             actions[seat].Ink=ink;actions[seat].AimYaw=yaw;actions[seat].AimPitch=pitch;actions[seat].Aiming=false;actions[seat].Target=-1;
-            if(QuickHandsActive){actions[seat].QuickEquipped=false;actions[seat].QuickSpent=!Game.UnlimitedItems;actions[seat].QuickItemVersion++;}
+            if(QuickHandsActive){actions[seat].QuickEquipped=false;actions[seat].QuickSpent=true;actions[seat].QuickItemVersion++;}
             inkFlights[seat]=new DuelInkFlight(seat,life,iteration,ink);Sequence++;return true;
         }
         private bool AnyInkFlight(){foreach(var flight in inkFlights)if(flight!=null)return true;return false;}
@@ -49,7 +50,7 @@ namespace HelloWorld
                 {inkFlights[i]=null;continue;}
                 if(!flight.Tick(Game.AliveMask,now,tabletop.State,out var hit,out var point))continue;
                 inkFlights[i]=null;actions[i].Ink.ImpactAt=now;actions[i].Ink.Impact=point;actions[i].Ink.Target=hit.Seat;
-                if(RouletteRules.Has(Game.AliveMask,hit.Seat))actions[hit.Seat].Ink.InkedAt=now;
+                if(RouletteRules.Has(Game.AliveMask,hit.Seat)){actions[hit.Seat].Ink.InkedAt=now;actions[hit.Seat].InkEffectSkin=EffectSkinFor(i,DuelItem.Ink);}
                 Sequence++;changed=true;
             }
             if(changed&&clock.State.Phase==ClockPhase.Shooting&&shotOpportunitySpent&&!AnyProjectile()&&!FinishPartyIfReady(now))clock.Return(now);
@@ -61,7 +62,7 @@ namespace HelloWorld
             bool changed=false;
             for(int bot=1;bot<actions.Length;bot++)
             {
-                var a=actions[bot];if(!IsBot(bot)||!a.Ink.Owned||aiInkUsedIteration[bot]==clock.State.Iteration||!CanUseInk(bot,now)||now-a.StartedAt<.35||QuickHandsActive&&(!a.QuickEquipped||a.QuickItem!=3))continue;
+                var a=actions[bot];if(!IsBot(bot)||a.PreparedItem!=(int)DuelItem.Ink+1||!a.Ink.Owned||aiInkUsedIteration[bot]==clock.State.Iteration||!CanUseInk(bot,now)||now-a.StartedAt<.35||QuickHandsActive&&(!a.QuickEquipped||a.QuickItem!=3))continue;
                 if(!a.Ink.Armed){changed|=UseInk(bot,clock.State.Iteration,now);continue;}
                 int target=RandomTarget(bot);if(target<0)continue;
                 AimAiInk(bot,target,out float yaw,out float pitch);

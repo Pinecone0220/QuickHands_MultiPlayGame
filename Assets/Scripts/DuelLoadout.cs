@@ -4,6 +4,13 @@ namespace HelloWorld
     {
         public const int Required=2;
         public const int ItemCount=5,Default=(1<<(int)DuelItem.Recovery)|(1<<(int)DuelItem.Taser),All=(1<<ItemCount)-1;
+        public static bool CanPreview(DuelPhase phase,DuelStage stage,ClockPhase clock,bool connected,bool alive,bool practice,bool dead)
+        {
+            if(!connected||practice||dead||phase==DuelPhase.Finished)return false;
+            if(phase==DuelPhase.Waiting)return stage==DuelStage.Idle;
+            return phase==DuelPhase.Playing&&alive&&(stage==DuelStage.Countdown||stage==DuelStage.Racing&&
+                clock!=ClockPhase.Shooting&&clock!=ClockPhase.QuickHands);
+        }
         public static bool Selectable(DuelItem item)=>item>=DuelItem.Recovery&&item<=DuelItem.NoruFace;
         private static readonly int[] aiPairs={9,18,5,6,17,10,20,3,12,24};
         public static int AiSelection(int seat)=>AiSelection(seat,1);

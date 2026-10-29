@@ -1,92 +1,76 @@
-﻿using System;
+using System;
+using Unity.Netcode.Transports.UTP;
+using Unity.Services.Authentication;
+using Unity.Services.Core;
+using Unity.Services.Relay;
+using Unity.Services.Relay.Models;
+using Unity.Networking.Transport.Relay;
+using UnityEngine;
+
 namespace HelloWorld
 {
     public partial class HelloWorldManager
     {
-        public DuelLanRooms Rooms {get;}=new DuelLanRooms();
-        public string RoomTitle {get;private set;}="";
-        public string RoomCode {get;private set;}="";
-        public bool CanShareRoomInvite=>Busy&&!leaving&&network!=null&&network.IsHost&&roomId.Length>0;
-        public string RoomInvite=>CanShareRoomInvite?DuelRoomInvite.Encode(new DuelLanRoom{id=roomId,code=RoomCode,title=RoomTitle,port=SessionPort,count=RouletteRules.Count(ServerGame.ConnectedMask),max=6,protocol=DuelLanRooms.Protocol,locked=roomProof.Length>0,joinable=true}):"";
-        public void JoinRoomInvite(string invite,string password)
+        public string RelayCode { get; private set; } = "";
+        private int relayRequest;
+
+        public void HostRoom(string unused) => StartRelay(false, "");
+        public void JoinRoom(string code, string unused) => StartRelay(true, code);
+
+        private async void StartRelay(bool join, string code)
         {
-            if(Busy||RoomRequestPending)return;
-            if(!DuelRoomInvite.TryDecode(invite,out var room,out var error)){Status=error;return;}
-            Rooms.StopBrowsing();JoinRoom(room,password);
-        }
-        private string roomId="",roomProof="";
-        private enum RoomRequest {None,Create,Join}
-        private RoomRequest roomRequest;
-        private string pendingCode="",pendingTitle="",pendingPassword="";
-        private double roomRequestEnds;
-        public bool RoomRequestPending=>roomRequest!=RoomRequest.None;
-        public void CreateRoom(string title,string password,string code)
-        {
-            if(Busy||RoomRequestPending||network==null||network.IsListening||network.ShutdownInProgress)return;
-            if(!DuelRoomCode.TryNormalize(code,out code)){Status="방 코드는 영문·숫자 4~12자로 입력하세요.";return;}
-            if(!ValidPassword(password)){Status="비밀번호는 제어 문자 없이32자 이내로 입력하세요.";return;}
-            title=(title??"").Trim();if(title.Length>40)title=title.Substring(0,40);
-            foreach(char c in title)if(char.IsControl(c)){Status="방 제목을 확인하세요.";return;}
-            StartRoomRequest(RoomRequest.Create,code,title,password);
-        }
-        private void CreateRoomNow(string title,string password,string code)
-        {
-            roomId=Guid.NewGuid().ToString("N");roomProof=DuelRoomAdmission.PasswordProof(roomId,password);
-            RoomTitle=title.Length==0?"함께 한 판":title;RoomCode=code;
-            Begin(DuelMode.PvP,false,"127.0.0.1","7777");
-            if(Busy&&!leaving&&network.IsHost&&!Rooms.StartHosting())Fail(Rooms.Error);
-        }
-        public void BrowseRooms(){if(!Busy&&!RoomRequestPending){Rooms.Search(UnityEngine.Time.realtimeSinceStartupAsDouble);Status="같은 Wi-Fi/LAN의 방을 찾는 중…";}}
-        public void JoinRoomCode(string code,string password)
-        {
-            if(Busy||RoomRequestPending||network==null||network.IsListening||network.ShutdownInProgress)return;
-            if(!DuelRoomCode.TryNormalize(code,out code)){Status="방 코드는 영문·숫자 4~12자로 입력하세요.";return;}
-            if(!ValidPassword(password)){Status="비밀번호는32자 이내로 입력하세요.";return;}
-            StartRoomRequest(RoomRequest.Join,code,"",password);
-        }
-        private void StartRoomRequest(RoomRequest request,string code,string title,string password)
-        {
-            double now=UnityEngine.Time.realtimeSinceStartupAsDouble;
-            if(!Rooms.Search(now)){Status=Rooms.Error;return;}
-            roomRequest=request;pendingCode=code;pendingTitle=title;pendingPassword=password;
-            roomRequestEnds=now+DuelLanRooms.LookupDuration;Status=request==RoomRequest.Create?"방 코드 중복을 확인하는 중…":"방 코드로 찾는 중…";
-        }
-        private void FinishRoomRequest(double now)
-        {
-            if(!RoomRequestPending||now<roomRequestEnds)return;
-            int matches=0;DuelLanRoom match=null;
-            foreach(var room in Rooms.Rooms)if(room.code==pendingCode){matches++;match=room;}
-            var request=roomRequest;string code=pendingCode,title=pendingTitle,password=pendingPassword;
-            CancelRoomRequest();
-            if(request==RoomRequest.Create)
+            if (network == null || Busy || network.IsListening || network.ShutdownInProgress) return;
+            code = (code ?? "").Trim().ToUpperInvariant();
+            if (join && code.Length == 0) { Status = "방 코드를 입력하세요."; return; }
+            int request = ++relayRequest;
+            RelayCode = "";
+            Busy = true;
+            connectDeadline = Time.realtimeSinceStartupAsDouble + 30;
+            Status = join ? "방에 연결하는 중…" : "방을 만드는 중…";
+            try
             {
-                if(matches>0){Status="이미 사용 중인 방 코드입니다. 다른 코드를 입력하세요.";return;}
-                CreateRoomNow(title,password,code);
+                if (UnityServices.State != ServicesInitializationState.Initialized)
+                    await UnityServices.InitializeAsync();
+                if (request != relayRequest || this == null) return;
+                if (!AuthenticationService.Instance.IsSignedIn)
+                    await AuthenticationService.Instance.SignInAnonymouslyAsync();
+                if (request != relayRequest || this == null) return;
+                var transport = network.NetworkConfig.NetworkTransport as UnityTransport;
+                if (transport == null) throw new InvalidOperationException("Unity Transport가 없습니다.");
+                if (join)
+                {
+                    var allocation = await RelayService.Instance.JoinAllocationAsync(code);
+                    if (request != relayRequest || this == null) return;
+                    transport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+                }
+                else
+                {
+                    var allocation = await RelayService.Instance.CreateAllocationAsync(RouletteRules.MaxPlayers - 1);
+                    if (request != relayRequest || this == null) return;
+                    code = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+                    if (request != relayRequest || this == null) return;
+                    transport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+                }
+                Busy = false;
+                RelayCode = join ? "" : code;
+                Begin(DuelMode.PvP, join, "", "7777", true);
+                if (!Busy) RelayCode = "";
             }
-            else if(matches==0)Status=Rooms.IncompatibleCount>0?"다른 버전의 방이 발견됐습니다. 같은 최신 빌드로 실행하세요.":"해당 방 코드를 찾지 못했습니다. 방 목록 또는 방장의 초대 코드로 참가하세요.";
-            else if(matches>1)Status="같은 방 코드가 여러 개입니다. 방 목록에서 선택하세요.";
-            else JoinRoom(match,password);
+            catch (Exception exception)
+            {
+                if (request != relayRequest || this == null) return;
+                Debug.LogWarning("Relay 연결 실패: " + exception);
+                RelayCode = "";
+                Busy = false;
+                Status = join ? "방에 연결하지 못했습니다. 방 코드와 네트워크를 확인하세요." :
+                    "방을 만들지 못했습니다. 네트워크와 Unity 서비스 설정을 확인하세요.";
+            }
         }
-        private void CancelRoomRequest()
-        {roomRequest=RoomRequest.None;pendingCode=pendingTitle=pendingPassword="";Rooms.StopBrowsing();}
-        public void JoinRoom(DuelLanRoom room,string password)
+
+        private void CancelRelayRequest()
         {
-            if(Busy||RoomRequestPending||room==null)return;
-            if(!room.joinable||room.count>=6){Status=room.count>=6?"가득 찬 방입니다.":"이미 게임이 진행 중인 방입니다.";return;}
-            if(!ValidPassword(password)){Status="비밀번호는32자 이내로 입력하세요.";return;}
-            roomId=room.id;roomProof=DuelRoomAdmission.PasswordProof(roomId,password);RoomTitle=room.title;RoomCode=room.code;
-            UnityEngine.Debug.Log("[LAN] Connecting to "+room.address+":"+room.port+", protocol="+DuelLanRooms.Protocol);
-            Begin(DuelMode.PvP,true,room.address,room.port.ToString());
-        }
-        private static bool ValidPassword(string password)
-        {if(password==null)return true;if(password.Length>32)return false;foreach(char c in password)if(char.IsControl(c))return false;return true;}
-        private void TickRooms()
-        {
-            DuelLanRoom room=null;
-            if(Busy&&!leaving&&network.IsHost&&director!=null&&ServerGame.Mode==DuelMode.PvP&&roomId.Length>0)
-                room=new DuelLanRoom{id=roomId,code=RoomCode,title=RoomTitle,port=SessionPort,count=RouletteRules.Count(ServerGame.ConnectedMask),max=6,protocol=DuelLanRooms.Protocol,
-                    locked=roomProof.Length>0,joinable=director.Stage==DuelStage.Idle&&ServerGame.Phase!=DuelPhase.Playing&&OccupiedRoomSlots<RouletteRules.MaxPlayers};
-            double now=UnityEngine.Time.realtimeSinceStartupAsDouble;Rooms.Tick(room,now);FinishRoomRequest(now);
+            relayRequest++;
+            RelayCode = "";
         }
     }
 }

@@ -109,7 +109,7 @@ public sealed class ItemRuntimeQA:MonoBehaviour
             }
             while(player.State.Value.Clock.Phase!=ClockPhase.Returning)yield return null;yield return null;
             Check(!player.State.Value.ForSeat(seat).Stunned&&!player.State.Value.ForSeat(seat).TaserArmed&&V<VisualElement>("electricOverlay").style.display.value==DisplayStyle.None,"all used and unused turn effects expire");
-            if(round==1)Check(player.State.Value.Seat0.Ammo==0&&player.State.Value.Seat0.FiredAt>=0,"involuntary server trigger consumes shooter ammunition");
+            if(round==1)Check(player.State.Value.Seat0.Ammo==1&&player.State.Value.Seat0.FiredAt<0,"shock preserves shooter ammunition");
         }
         Mark("checked");while(!Seen("host","checked")||!Seen("client","checked")||!Seen("witness","checked"))yield return null;
         Finish("PASS items "+role+": "+checks+" host-choice/repeat/inventory/heal/taser/stun/cooldown/kill-log checks");

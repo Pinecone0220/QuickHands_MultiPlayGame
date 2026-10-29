@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -10,39 +10,40 @@ namespace HelloWorld
     {
         private readonly struct HoverInfo
         {
-            public readonly string Title,Body;
-            public HoverInfo(string title,string body){Title=title;Body=body;}
+            public readonly string Title,Body,Detail;
+            public HoverInfo(string title,string body,string detail=""){Title=title;Body=body;Detail=detail;}
         }
         private readonly Dictionary<VisualElement,Func<HoverInfo>> hoverTips=new Dictionary<VisualElement,Func<HoverInfo>>();
         private VisualElement hoverTip,hoverTarget;
-        private Label hoverTipTitle,hoverTipBody;
+        private Label hoverTipTitle,hoverTipDetail,hoverTipBody;
         private double hoverTipAt;
         private void BindHoverTip(VisualElement target,Func<HoverInfo> info)=>hoverTips.Add(target,info);
         private void BuildHoverTip()
         {
             hoverTip=Box(root,"hover-tip");hoverTip.pickingMode=PickingMode.Ignore;
-            hoverTipTitle=Text(hoverTip,"","hover-tip-title");hoverTipBody=Text(hoverTip,"","hover-tip-body");
-            hoverTipTitle.pickingMode=hoverTipBody.pickingMode=PickingMode.Ignore;
+            hoverTipTitle=Text(hoverTip,"","hover-tip-title");hoverTipDetail=Text(hoverTip,"","hover-tip-detail");hoverTipBody=Text(hoverTip,"","hover-tip-body");
+            hoverTipTitle.pickingMode=hoverTipDetail.pickingMode=hoverTipBody.pickingMode=PickingMode.Ignore;
             Show(hoverTip,false);
         }
         private static HoverInfo WeaponHoverInfo(DuelWeapon weapon)
         {
-            string body=weapon==DuelWeapon.BAS?"레버액션 · 3배율 스코프\n머리만 피해 · 목숨 2개 차감":weapon==DuelWeapon.SawedOff?
-                "대난투: 빠른 준비 · 정조준 없음\n직격 75 · 양옆 25":$"대난투: 부분 장전 · 최대 6발\n머리 {WeaponRules.Damage(weapon,DuelHitPart.Head)} · 몸통 {WeaponRules.Damage(weapon,DuelHitPart.Body)} · 다리 {WeaponRules.Damage(weapon,DuelHitPart.Legs)}";
+            string body=weapon==DuelWeapon.BAS?"레버액션 · 정조준 시 정확\n지향사격 부정확 · 머리만 피해":weapon==DuelWeapon.SawedOff?
+                "대난투: 빠른 준비 · 산탄 사격\n직격 75 · 양옆 25":$"대난투: 부분 장전 · 최대 6발\n머리 {WeaponRules.Damage(weapon,DuelHitPart.Head)} · 몸통 {WeaponRules.Damage(weapon,DuelHitPart.Body)} · 다리 {WeaponRules.Damage(weapon,DuelHitPart.Legs)}";
             return new HoverInfo(WeaponRules.Name(weapon),body);
         }
         private static HoverInfo ItemHoverInfo(DuelItem item)=>new HoverInfo(DuelItemArt.Name(item),item==DuelItem.Recovery?
-            "체력 50 회복 · 소모성":item==DuelItem.NoruFace?"이번 사격 턴 테이저 피해·감전 면역\n2게임 쿨타임":item==DuelItem.Bullet?"사격자 전용 · 발사 1회 추가\n2개 지급 · 한 턴에 1개 · 소모성":item==DuelItem.Ink?"화면 대부분을 최대 5초 가립니다.\n소모성":"피해 5 · 최대 2초 감전\n2게임 쿨타임");
+            "체력 50 회복":item==DuelItem.NoruFace?"이번 사격 턴 테이저 피해·감전 면역":item==DuelItem.Bullet?"사격자 전용 · 발사 1회 추가\n2개 지급 · 한 턴에 1개":item==DuelItem.Ink?"화면 대부분을 최대 5초 가립니다.":"피해 5 · 양옆 자리까지\n1.3초 감전",
+            item==DuelItem.Taser||item==DuelItem.NoruFace?"2게임 쿨타임":"소모성");
         private void LateUpdate()
         {
             UpdateHoverTip();UpdateInkLayering();
             // Above the rendered world, below every UI panel (including world-space name labels).
-            crosshair?.SendToBack();
+            crosshair?.SendToBack();OrderViewModel();
         }
         private void UpdateHoverTip()
         {
             if(hoverTip==null)return;
-            if(!DuelPointer.HasPlayer||!DuelPointer.AltHeld||Mouse.current==null||root.panel==null)
+            if(!DuelPointer.HasPlayer||!DuelPointer.UiMode||Mouse.current==null||root.panel==null)
             {hoverTarget=null;Show(hoverTip,false);return;}
             var mouse=Mouse.current.position.ReadValue();
             var point=RuntimePanelUtils.ScreenToPanel(root.panel,new Vector2(mouse.x,Screen.height-mouse.y));
@@ -51,7 +52,7 @@ namespace HelloWorld
             while(target!=null&&!hoverTips.ContainsKey(target))target=target.parent;
             if(target!=hoverTarget){hoverTarget=target;hoverTipAt=Time.realtimeSinceStartupAsDouble+.18;Show(hoverTip,false);}
             if(target==null||Time.realtimeSinceStartupAsDouble<hoverTipAt){Show(hoverTip,false);return;}
-            var info=hoverTips[target]();hoverTipTitle.text=info.Title;hoverTipBody.text=info.Body;
+            var info=hoverTips[target]();hoverTipTitle.text=info.Title;hoverTipDetail.text=info.Detail;Show(hoverTipDetail,!string.IsNullOrEmpty(info.Detail));hoverTipBody.text=info.Body;
             Show(hoverTip,true);hoverTip.BringToFront();
             point=root.WorldToLocal(point);
             float width=hoverTip.resolvedStyle.width,height=hoverTip.resolvedStyle.height;

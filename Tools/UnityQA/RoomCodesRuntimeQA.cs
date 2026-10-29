@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
@@ -24,7 +24,7 @@ public sealed class RoomCodesRuntimeQA:MonoBehaviour
     {
         Check(DuelRoomCode.TryNormalize("  abc123  ",out var normalized)&&normalized=="ABC123","code canonicalization");
         foreach(var invalid in new[]{null,"","ABC","ABCDEFGHIJKLM","한글코드","A B1","A-B1","ABC\nD","ſsss","ＡBCD"})Check(!DuelRoomCode.TryNormalize(invalid,out _),"reject malformed code");
-        Check(DuelRoomCode.TryNormalize("1234",out _)&&DuelRoomCode.TryNormalize("AbCd12345678",out _),"numeric and maximum-length code");Check(DuelLanRooms.Protocol==55,"new discovery protocol");
+        Check(DuelRoomCode.TryNormalize("1234",out _)&&DuelRoomCode.TryNormalize("AbCd12345678",out _),"numeric and maximum-length code");Check(DuelLanRooms.Protocol==59,"current discovery protocol");
         yield return new WaitForSecondsRealtime(.8f);manager=HelloWorldManager.Instance;view=manager.GetComponent<RouletteView>();RoomCameraCaptureQA.Setup(view);
         if(role=="host")
         {

@@ -8,6 +8,16 @@ namespace HelloWorld
         public const double SpinDuration=4.8, SelectionDuration=5.8;
         private static readonly PartyMiniGame[] games={PartyMiniGame.Countdown,PartyMiniGame.QuickHands,PartyMiniGame.Signal,PartyMiniGame.Greed,PartyMiniGame.Memory};
         public static int Count=>games.Length;
+        public static int AllMask=>(1<<Count)-1;
+        public static int Bit(PartyMiniGame game) { int index=IndexOf(game); return index<0?0:1<<index; }
+        public static PartyMiniGame ChooseAvailable(Random random,int playedMask)
+        {
+            int available=AllMask&~playedMask;
+            if(available==0)throw new InvalidOperationException("No minigames remain in this cycle.");
+            int pick=random.Next(0,RouletteRules.Count(available));
+            foreach(var game in games)if((available&Bit(game))!=0&&pick--==0)return game;
+            throw new InvalidOperationException("Could not choose a minigame.");
+        }
         public static PartyMiniGame At(int index)=>games[(index%games.Length+games.Length)%games.Length];
         public static PartyMiniGame Choose(Random random,PartyMiniGame? previous=null)
         {

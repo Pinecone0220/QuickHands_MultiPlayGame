@@ -49,22 +49,24 @@ class AiEquipmentTests
         }
         Check(gunSet.Count==3&&pairSet.Count==10&&items==DuelLoadout.All,"single bot rotates all weapons and all ten distinct item pairs on rematches");
         var quick=Party();Prep(quick,-1,PartyMiniGame.QuickHands);quick.Tick(2.8);
-        Check(quick.ForSeat(2).QuickItem==2&&quick.ForSeat(3).QuickItem==3&&quick.ForSeat(5).NoruFaceActive,"quick-hands preparation distributes taser, ink and jacket");
+        Check(quick.ForSeat(2).PreparedItem==(int)DuelItem.Taser+1&&quick.ForSeat(3).PreparedItem==(int)DuelItem.Ink+1&&quick.ForSeat(5).PreparedItem==(int)DuelItem.NoruFace+1,"quick-hands preparation selects taser, ink and jacket");
         Check(quick.ForSeat(1).QuickItem==0&&!quick.ForSeat(1).BulletUsed,"healthy bot preserves healing and never uses bullet in quick hands");
         quick.Tick(7);quick.Tick(10);for(double time=10.02;time<=12;time+=.02)quick.Tick(time);
         Check(quick.ForSeat(2).FiredWeapon==DuelWeapon.Taser&&quick.ForSeat(2).ShotsFired>0,"bot equips and fires selected taser");
         Check(quick.ForSeat(3).Ink.Serial==1&&!quick.ForSeat(3).Ink.Owned&&!quick.ForSeat(3).QuickEquipped,"bot throws ink and returns to gun");
         var shared=Party();Prep(shared,1);shared.Game.Shoot(0,1,DuelWeapon.Revolver,DuelHitPart.Body,true);shared.Tick(2.8);
-        Check(shared.Game.HealthForSeat(1)==100&&!shared.ForSeat(1).HasRecovery&&shared.ForSeat(1).BulletUsed,"wounded shooter heals and reserves extra shot");
-        Check(shared.ForSeat(2).TaserArmed&&shared.ForSeat(2).NoruFaceActive&&shared.ForSeat(3).Ink.Armed&&shared.ForSeat(5).NoruFaceActive,"non-shooters prepare offensive and defensive items");
-        shared.Tick(7);for(double time=7.02;time<=9;time+=.02)shared.Tick(time);
-        Check(shared.ForSeat(1).ShotsFired==2&&shared.ForSeat(1).BulletItems==1,"AI uses both shared shots without duplicating bullet charge");
+        Check(shared.Game.HealthForSeat(1)==50&&shared.ForSeat(1).PreparedItem==(int)DuelItem.Recovery+1,"wounded shooter selects healing");
+        Check(shared.ForSeat(2).PreparedItem!=0&&shared.ForSeat(3).PreparedItem!=0&&shared.ForSeat(5).PreparedItem!=0,"non-shooters each select one item");
+        // The shooter now waits out shock instead of firing involuntarily during it.
+        shared.Tick(7);for(double time=7.02;time<=11;time+=.02)shared.Tick(time);
+        Check(shared.ForSeat(1).ShotsFired==1&&shared.ForSeat(1).BulletItems==2,"AI healing excludes bonus bullet");
         Check(shared.ForSeat(3).Ink.Serial==1,"shared-turn bot actually throws prepared ink");
         var healing=Party();Prep(healing,-1,PartyMiniGame.QuickHands);healing.Game.Shoot(0,1,DuelWeapon.Revolver,DuelHitPart.Body,true);healing.Tick(2.8);
-        Check(healing.Game.HealthForSeat(1)==100&&healing.ForSeat(1).QuickSpent&&!healing.ForSeat(1).HasRecovery,"low-health bot prioritizes healing and obeys one-item slot");
+        Check(healing.Game.HealthForSeat(1)==50&&healing.ForSeat(1).PreparedItem==(int)DuelItem.Recovery+1,"low-health bot selects healing");healing.Tick(7);
+        Check(healing.Game.HealthForSeat(1)==100&&healing.ForSeat(1).QuickSpent&&!healing.ForSeat(1).HasRecovery,"healing commits at deadline");
         var infinite=Party(1,AiDifficulty.Normal,true,true);Prep(infinite,1);infinite.Tick(2.8);infinite.Tick(7);
         for(double time=7.02;time<12;time+=.02)infinite.Tick(time);
-        Check(infinite.ForSeat(1).Ink.Serial==1&&infinite.ForSeat(1).ShotsFired==2,"unlimited ink is used once so bot resumes gun and extra shot");
+        Check(infinite.ForSeat(1).ShotsFired==1&&infinite.ForSeat(1).Ink.Serial==0,$"unlimited one item shots={infinite.ForSeat(1).ShotsFired} ink={infinite.ForSeat(1).Ink.Serial} selected={infinite.ForSeat(1).PreparedItem}");
         var switchBack=Party(2,AiDifficulty.Hard,true,true);Prep(switchBack,-1,PartyMiniGame.QuickHands);switchBack.Tick(2.8);switchBack.Tick(7);switchBack.Tick(10);
         int taserShots=0,lastShots=0;bool gunFired=false;
         for(double time=10.02;time<26;time+=.02)

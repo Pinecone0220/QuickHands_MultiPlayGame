@@ -23,7 +23,8 @@ namespace HelloWorld
             bool ended=clockPhase==ClockPhase.Returning||clockPhase==ClockPhase.QuickResults||clockPhase==ClockPhase.Dice;
             return phase==DuelPhase.Finished?ended?Math.Min(stageAt,phaseAt):stageAt:phase==DuelPhase.Playing&&ended?phaseAt:-1;
         }
-        public static AimVector ThrowOrigin(int seat,float yaw,float pitch)=>DuelGunplay.Eye(seat)+DuelGunplay.Direction(yaw,pitch)*.65f+DuelGunplay.Direction(yaw+90,0)*.24f+new AimVector(0,-.10f,0);
+        // Keep the throw on the view's horizontal centerline; gravity still shapes its arc.
+        public static AimVector ThrowOrigin(int seat,float yaw,float pitch)=>DuelGunplay.Eye(seat)+DuelGunplay.Direction(yaw,pitch)*.65f+new AimVector(0,-.10f,0);
         public static AimVector Position(DuelInkState state,double now)
         {
             float t=(float)Math.Max(0,now-state.ThrownAt-ReleaseDelay);

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 namespace HelloWorld
 {
     // Matches the existing procedural weapon icon style. No UI text is baked into the thumbnails.
@@ -70,7 +70,7 @@ namespace HelloWorld
             }
             t.SetPixels(p);t.Apply();return t;
         }
-        public static Texture2D Effect(bool electric)
+        public static Texture2D Effect(bool electric,Color? skinColor=null,int tier=0)
         {
             const int n=256;var t=new Texture2D(n,n,TextureFormat.RGBA32,false){name=electric?"Electrical interference":"Healing aurora",wrapMode=TextureWrapMode.Clamp};var p=new Color[n*n];
             for(int y=0;y<n;y++)for(int x=0;x<n;x++)
@@ -78,7 +78,10 @@ namespace HelloWorld
                 float edge=1-Mathf.Min(Mathf.Min(x,n-1-x),Mathf.Min(y,n-1-y))/55f;edge=Mathf.Clamp01(edge);
                 float wave=.55f+.45f*Mathf.Sin(x*.07f+y*.05f);
                 float bolt=electric&&Mathf.Abs(x-(25+Mathf.Sin(y*.17f)*8))<2||electric&&Mathf.Abs(x-(n-25+Mathf.Sin(y*.13f)*9))<2?1:0;
-                p[y*n+x]=electric?new Color(.25f,.76f,1,edge*.12f+bolt*.6f):new Color(.17f,1,.43f,edge*edge*wave*.38f);
+                Color baseColor=skinColor??(electric?new Color(.25f,.76f,1):new Color(.17f,1,.43f));
+                float alpha=electric?edge*.12f+bolt*.6f:edge*edge*wave*.38f;
+                if(skinColor.HasValue&&tier>0){float sparkle=Mathf.Pow(Mathf.Max(0,Mathf.Sin(x*.11f+y*.09f)),18)*edge;alpha=Mathf.Clamp01(alpha+sparkle*(.07f+tier*.025f));}
+                p[y*n+x]=new Color(baseColor.r,baseColor.g,baseColor.b,alpha);
             }
             t.SetPixels(p);t.Apply(false,true);return t;
         }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections;
 using System.Net;
@@ -37,8 +37,6 @@ namespace HelloWorld
         private double connectDeadline;
         private bool leaving, everConnected;
         public AiDifficulty Difficulty { get; set; } = AiDifficulty.Normal;
-        public int AiCount { get; set; } = 1;
-        private int sessionAiCount;
 
         private void Awake()
         {
@@ -61,26 +59,26 @@ namespace HelloWorld
             gameObject.AddComponent<DuelPointer>();
             if (network == null) { Status = "씬에 NetworkManager가 없습니다."; return; }
             network.NetworkConfig.ConnectionApproval = true;
-            network.NetworkConfig.ProtocolVersion = DuelLanRooms.Protocol;
+            network.NetworkConfig.ProtocolVersion = DuelNetworkProtocol.Version;
             network.ConnectionApprovalCallback = Approve;
             network.OnClientDisconnectCallback += Disconnected;
             network.OnClientConnectedCallback += Connected;
             network.OnTransportFailure += TransportFailed;
         }
 
-        public void Begin(DuelMode mode, bool join, string address, string portText)
+        public void Begin(DuelMode mode, bool join, string address, string portText, bool relay = false)
         {
-            if (network == null || Busy || RoomRequestPending || network.IsListening || network.ShutdownInProgress) return;
+            if (network == null || Busy || network.IsListening || network.ShutdownInProgress) return;
             if (!ushort.TryParse(portText, out ushort port) || port == 0)
             { Status = "포트는 1~65535 사이의 숫자여야 합니다."; return; }
-            if (join && !IPAddress.TryParse(address.Trim(), out _))
+            if (join && !relay && !IPAddress.TryParse((address ?? "").Trim(), out _))
             { Status = "접속할 호스트의 IP 주소를 입력하세요."; return; }
             var transport = network.NetworkConfig.NetworkTransport as UnityTransport;
             if (transport == null) { Status = "Unity Transport가 필요합니다."; return; }
             ushort selectedPort = port;
             try
             {
-                if (!join && mode == DuelMode.PvP) selectedPort = SelectHostPort(port);
+                if (!relay && !join && mode == DuelMode.PvP) selectedPort = SelectHostPort(port);
             }
             catch (SocketException exception)
             {
@@ -89,20 +87,24 @@ namespace HelloWorld
                 return;
             }
             DeveloperMode=false;
-            SessionPort = mode == DuelMode.AI && !join ? (ushort)0 : selectedPort;
-            players.Clear(); reservations.Clear();chatLog.Clear();GetComponent<DuelChat>()?.ClearRoom();
+            SessionPort = relay || mode == DuelMode.AI && !join ? (ushort)0 : selectedPort;
+            players.Clear(); reservations.Clear();lobbyBotOrder.Clear();chatLog.Clear();GetComponent<DuelChat>()?.ClearRoom();
             requestedNames.Clear(); Array.Clear(names, 0, names.Length); joinOrder = 0;
             publishedRound = publishedShots = 0;
             Array.Clear(damageReports, 0, damageReports.Length);
             Array.Clear(publishedLives,0,publishedLives.Length);
             roundResults = default;
-            if(mode==DuelMode.AI){roomId=roomProof=RoomTitle=RoomCode="";}
-            Rooms.StopBrowsing();
-            network.NetworkConfig.ConnectionData = roomId.Length>0?DuelRoomAdmission.Encode(roomId,Nickname,roomProof):Encoding.UTF8.GetBytes(NicknamePolicy.Normalize(Nickname));
+            network.NetworkConfig.ConnectionData = Encoding.UTF8.GetBytes(NicknamePolicy.Normalize(Nickname));
             leaving = everConnected = false;
             director = join ? null : new DuelDirector(mode, difficulty: Difficulty);
             if (director != null)
             {
+                director.CosmeticSkinsForSeat = seat =>
+                {
+                    foreach(var player in players.Values)
+                        if(player!=null && player.IsSpawned && player.Seat.Value==seat) return player.CosmeticSkins.Value;
+                    return 0;
+                };
                 director.ShotConfirmed += Publish;
                 director.PracticeHitConfirmed += (actor,session,shot,headshot)=>
                 {
@@ -112,16 +114,14 @@ namespace HelloWorld
                             player.ReportPracticeHitRpc(director.Game.Round,session,shot,headshot);
                 };
             }
-            sessionAiCount = Mathf.Clamp(AiCount, 1, RouletteRules.MaxPlayers - 1);
             Busy = true;
             connectDeadline = Time.realtimeSinceStartupAsDouble + 15;
-            Status = join ? "상대의 방에 연결 중…" : mode == DuelMode.AI ? "딜러가 자리에 앉습니다…" : "상대를 기다리는 중…";
+            Status = join ? "상대의 방에 연결 중…" : mode == DuelMode.AI ? "싱글플레이 로비를 여는 중…" : "상대를 기다리는 중…";
             if (!join && mode == DuelMode.PvP && selectedPort != port)
                 Status = $"{port} 포트가 사용 중이어서 {selectedPort} 포트로 방을 만듭니다.";
             // Solo uses loopback and a free ephemeral port; approval rejects remote guests.
-            transport.SetConnectionData(join ? address.Trim() : "127.0.0.1",
-                SessionPort,
-                mode == DuelMode.AI ? "127.0.0.1" : "0.0.0.0");
+            if (!relay) transport.SetConnectionData(join ? (address ?? "").Trim() : "127.0.0.1",
+                SessionPort, mode == DuelMode.AI ? "127.0.0.1" : "0.0.0.0");
             try
             {
                 if (!(join ? network.StartClient() : network.StartHost()))
@@ -167,20 +167,17 @@ namespace HelloWorld
             bool allowed = ServerGame != null && (host ||
                 (ServerGame.Mode == DuelMode.PvP && director.Stage == DuelStage.Idle && ServerGame.Phase != DuelPhase.Playing && OccupiedRoomSlots < RouletteRules.MaxPlayers));
             string requestedName = "";
-            string admissionError="";
             try
             {
                 byte[] payload = request.Payload ?? Array.Empty<byte>();
-                if(roomId.Length>0)
-                {if(!DuelRoomAdmission.TryRead(payload,roomId,roomProof,out requestedName,out admissionError))allowed=false;}
-                else if (payload.Length > NicknamePolicy.MaxBytes) allowed = false;
+                if (payload.Length > NicknamePolicy.MaxBytes) allowed = false;
                 else requestedName = NicknamePolicy.Normalize(new UTF8Encoding(false, true).GetString(payload));
             }
             catch (DecoderFallbackException) { allowed = false; }
             response.Approved = allowed;
             response.CreatePlayerObject = allowed;
             response.Pending = false;
-            response.Reason = allowed ? string.Empty : admissionError.Length>0?admissionError:"참가할 수 없습니다. 진행 중인 경기 또는 가득 찬 6인 방입니다.";
+            response.Reason = allowed ? string.Empty : "참가할 수 없습니다. 진행 중인 경기 또는 가득 찬 6인 방입니다.";
             if (allowed) { reservations.Add(request.ClientNetworkId); requestedNames[request.ClientNetworkId] = requestedName; }
         }
 
@@ -195,12 +192,6 @@ namespace HelloWorld
             requestedNames.TryGetValue(player.OwnerClientId, out string requested);
             names[seat] = new FixedString64Bytes(NicknamePolicy.Resolve(requested, ++joinOrder));
             requestedNames.Remove(player.OwnerClientId);
-            if (ServerGame.Mode == DuelMode.AI)
-                for (int bot = 1; bot <= sessionAiCount; bot++)
-                {
-                    director.Join(bot, ServerNow);
-                    names[bot] = new FixedString64Bytes(sessionAiCount == 1 ? "AI" : "AI" + bot);
-                }
             Publish();
             StartCoroutine(ReplayChat(player));
         }
@@ -211,6 +202,7 @@ namespace HelloWorld
             if(network==null||!network.IsServer||player==null||!player.IsSpawned)yield break;
             foreach(var line in chatLog.History)
                 player.ReceiveChatRpc(line.Sequence,line.Sender,line.Name,line.Message);
+            player.ShowChatEntryNoticeRpc();
         }
 
         private void Publish()
@@ -302,6 +294,8 @@ namespace HelloWorld
 
         public void SetRoomUnlimitedItems(bool enabled)
         {if(!DeveloperMode||network==null||!network.IsHost||director==null||director.Stage!=DuelStage.Idle)return;if(director.Game.SetUnlimitedItems(enabled))Publish();}
+        public void SetRoomNoItemCooldown(bool enabled)
+        {if(!DeveloperMode||network==null||!network.IsHost||director==null||director.Stage!=DuelStage.Idle)return;if(director.Game.SetNoItemCooldown(enabled))Publish();}
         public void SetRoomAutoSelectItems(bool enabled)
         {if(!DeveloperMode||network==null||!network.IsHost||director==null||director.Stage!=DuelStage.Idle)return;if(director.SetAutoSelectItems(enabled))Publish();}
         public void SetRoomManualMiniGame(bool enabled)
@@ -315,12 +309,32 @@ namespace HelloWorld
         }
         public void ChooseMiniGame(PartyMiniGame game)
         {if(network==null||!network.IsHost||director==null)return;if(director.ChooseMiniGame(game,director.Clock.Iteration,ServerNow))Publish();}
-        public void RequestItem(ulong sender,DuelItem item,int round,int iteration)
-        {if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||!players.TryGetValue(sender,out var p)||p==null||!p.IsSpawned)return;if(director.UseItem(p.Seat.Value,item,iteration,ServerNow))Publish();}
+        public void RequestItem(ulong sender,DuelItem item,int round,int iteration,int practiceSession)
+        {
+            if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||!players.TryGetValue(sender,out var p)||p==null||!p.IsSpawned||p.OwnerClientId!=sender)return;
+            int seat=p.Seat.Value;
+            if(director.IsPracticing(seat)&&director.ForSeat(seat).PracticeSession!=practiceSession)return;
+            if(director.UseItem(seat,item,iteration,ServerNow))Publish();
+        }
+        public void RequestPreviewEquipment(ulong sender,int item,int round,int iteration,int life,int version)
+        {
+            if(network==null||!network.IsServer||director==null||round!=ServerGame.Round||!players.TryGetValue(sender,out var p)||p==null||!p.IsSpawned||p.OwnerClientId!=sender)return;
+            if(director.SetPreviewItem(p.Seat.Value,item,iteration,life,version,ServerNow))Publish();
+        }
+        public bool CanHostStart=>network!=null&&network.IsHost&&!leaving&&director!=null&&director.Stage==DuelStage.Idle&&
+            reservations.Count==players.Count&&director.CanStartParty;
         public void RequestRematch(ulong sender, int round)
         {
             if (network==null||!network.IsServer||director==null||!players.TryGetValue(sender,out var player)||player==null||!player.IsSpawned||player.OwnerClientId!=sender)return;
-            if (round == ServerGame.Round && reservations.Count == players.Count && director.Ready(player.Seat.Value, ServerNow)) Publish();
+            if(round!=ServerGame.Round||reservations.Count!=players.Count)return;
+            bool changed=player.Seat.Value==0&&sender==Unity.Netcode.NetworkManager.ServerClientId?director.StartParty(0,ServerNow):director.Ready(player.Seat.Value,ServerNow);
+            if(changed)Publish();
+        }
+        public void RequestHostPractice(ulong sender,int round)
+        {
+            if(network==null||!network.IsServer||director==null||sender!=Unity.Netcode.NetworkManager.ServerClientId||round!=ServerGame.Round||
+                !players.TryGetValue(sender,out var p)||p==null||!p.IsSpawned||p.OwnerClientId!=sender||p.Seat.Value!=0)return;
+            if(director.ToggleHostPractice(ServerNow))Publish();
         }
         public void RequestLook(ulong sender,float yaw,float pitch,bool ads,int round)
         {
@@ -375,7 +389,6 @@ namespace HelloWorld
         private void Update()
         {
             if (network == null) return;
-            TickRooms();
             if (leaving && !network.IsListening && !network.ShutdownInProgress)
             {
                 Busy = leaving = everConnected = false;
@@ -383,7 +396,7 @@ namespace HelloWorld
                 players.Clear(); reservations.Clear();
             }
             if (Busy && !leaving && !everConnected && Time.realtimeSinceStartupAsDouble > connectDeadline)
-                Fail("방에 응답이 없습니다. 방장과 같은 LAN인지, 게임의 방화벽 허용 여부를 확인하세요.");
+                Fail("연결 시간이 초과되었습니다. 방 코드와 네트워크 상태를 확인하세요.");
             if (!leaving && network.IsServer && director != null)
             {
                 if (director.Tick(ServerNow)) Publish();
@@ -418,22 +431,21 @@ namespace HelloWorld
             }
         }
 
-        private void TransportFailed() => Fail("네트워크 연결 오류가 발생했습니다. 방 목록을 확인하세요.");
+        private void TransportFailed() => Fail("네트워크 연결 오류가 발생했습니다. 네트워크 상태를 확인하세요.");
         private void Fail(string message)
         {
+            CancelRelayRequest();
             Status = message;
-            CancelRoomRequest();Rooms.StopHosting();roomId=roomProof=RoomTitle=RoomCode="";
             leaving = true;
             if (network != null && !network.ShutdownInProgress) network.Shutdown();
         }
         public void Leave()
         {
-            if(RoomRequestPending){CancelRoomRequest();Status="방 검색을 취소했습니다.";return;}
             if (Busy) Fail("테이블을 떠났습니다. 새 모드를 선택하세요.");
         }
         private void OnDestroy()
         {
-            Rooms.Dispose();
+            CancelRelayRequest();
             if (network != null)
             {
                 network.OnClientDisconnectCallback -= Disconnected;

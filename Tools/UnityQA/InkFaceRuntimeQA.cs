@@ -59,7 +59,7 @@ public sealed class InkFaceRuntimeQA:MonoBehaviour
         Check(attached&&mesh.triangles.Length>0&&mesh.triangles.Length<skin.triangles.Length,"stain follows actual front face facets with 1.5mm offset");
         Check(coats[3].GetComponentsInChildren<Collider>(true).Length==0,"cosmetic stain adds no hit collider");Check(mats[3].GetTexture("_BaseMap")!=null&&mats[3].shader.name=="Roulette/Ink","splatter texture and included shader available");
         var delta=DuelGunplay.Point(3,DuelHitPart.Head)-DuelGunplay.Eye(0);float distance=Mathf.Sqrt(delta.X*delta.X+delta.Z*delta.Z),t=(distance-.65f)/DuelInk.Speed;
-        DuelGunplay.Angles(delta,out float yaw,out float pitch);yaw-=Mathf.Atan2(.24f,distance)*Mathf.Rad2Deg;pitch=Mathf.Atan2(delta.Y+.1f-DuelInk.UpwardSpeed*t+.5f*DuelInk.Gravity*t*t,distance)*Mathf.Rad2Deg;
+        DuelGunplay.Angles(delta,out float yaw,out float pitch);pitch=Mathf.Atan2(delta.Y+.1f-DuelInk.UpwardSpeed*t+.5f*DuelInk.Gravity*t*t,distance)*Mathf.Rad2Deg;
         Check(D.UseItem(0,DuelItem.Ink,1,Now),"normal shooting equips pouch");Check(D.ThrowInk(0,yaw,pitch,1,a[0].Life,a[0].Ink.Version,Now,Now),"server accepts real throw");Publish();
         while(D.ForSeat(0).Ink.ImpactAt<0)yield return null;yield return new WaitForSecondsRealtime(.1f);
         Check(D.ForSeat(0).Ink.Target==3&&player.State.Value.Seat3.Ink.InkedAt>=0,"actual swept hit reaches replicated victim state");

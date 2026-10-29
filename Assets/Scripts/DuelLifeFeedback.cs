@@ -11,6 +11,8 @@ namespace HelloWorld
     {
         internal const float RecoveryFadeDuration=.75f;
         internal const float PermanentRecoveryDuration=1.6f+RecoveryFadeDuration;
+        internal const float LifeDisplayEnd=2.2f;
+        internal const float SpectatorFadeDuration=1f;
         private HelloWorldPlayer session;
         private RouletteView view;
         private Camera cameraTarget;
@@ -43,12 +45,13 @@ namespace HelloWorld
         {
             var go=new GameObject(name);go.transform.SetParent(transform,false);
             var source=go.AddComponent<AudioSource>();source.playOnAwake=false;source.loop=false;
-            source.spatialBlend=0;source.priority=40;source.volume=volume;source.bypassListenerEffects=true;
+            source.spatialBlend=0;source.priority=40;source.volume=volume*DuelSettings.Effects;source.bypassListenerEffects=true;
             source.clip=Resources.Load<AudioClip>("GameFeedback/"+clip);return source;
         }
         private void Play(AudioSource source,string name,double age=0)
         {
             if(source==null||source.clip==null||age>=source.clip.length)return;
+            if(source==heart)source.volume=.62f*DuelSettings.Effects;else source.volume=.65f*DuelSettings.Effects;
             source.time=(float)Math.Max(0,age);source.Play();Played?.Invoke(name);
         }
         private void BindCamera()
@@ -81,8 +84,11 @@ namespace HelloWorld
         {
             if(diedAt<0||now<diedAt)return 0;
             float enter=Mathf.SmoothStep(0,1,(float)(now-diedAt)/.3f);
-            double release=permanentOrFinal?diedAt+PermanentRecoveryDuration-RecoveryFadeDuration:reviveAt;
-            return enter*(release<0?1:1-Mathf.SmoothStep(0,1,(float)(now-release)/RecoveryFadeDuration));
+            if(permanentOrFinal)
+                return enter*(1-Mathf.SmoothStep(0,1,(float)(now-diedAt-(PermanentRecoveryDuration-RecoveryFadeDuration))/RecoveryFadeDuration));
+            float spectator=1-Mathf.SmoothStep(0,1,(float)(now-diedAt-LifeDisplayEnd)/SpectatorFadeDuration);
+            float recovery=reviveAt<0?1:1-Mathf.SmoothStep(0,1,(float)(now-reviveAt)/RecoveryFadeDuration);
+            return enter*Mathf.Min(spectator,recovery);
         }
         private void Clear()
         {
@@ -116,6 +122,11 @@ namespace HelloWorld
             SuppressDeathBanner=true;
             float amount=Envelope(now,a.DiedAt,a.ReviveAt,a.LivesRemaining==0||final);Apply(amount);
             double age=now-a.DiedAt;
+            if(heart!=null&&a.LivesRemaining>0&&!final)
+            {
+                heart.volume=.62f*DuelSettings.Effects*(1-Mathf.SmoothStep(0,1,(float)(age-LifeDisplayEnd)/SpectatorFadeDuration));
+                if(heart.volume<=0&&heart.isPlaying)heart.Stop();
+            }
             LifeOpacity=final?0:Mathf.SmoothStep(0,1,(float)(age-.25)/.25f)*(1-Mathf.SmoothStep(0,1,(float)(age-1.7)/.5f));
             NumberScroll=Mathf.SmoothStep(0,1,(float)(age-.65)/.65f);
             if(!final&&a.LivesRemaining>0&&a.ReviveAt>=0&&now>=a.ReviveAt&&!gasped)

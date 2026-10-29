@@ -18,7 +18,7 @@ namespace HelloWorld
     // Discovery has no game authority. Only response-source IPv4 addresses are accepted.
     public sealed class DuelLanRooms:IDisposable
     {
-        public const int Protocol=55,FirstPort=47770,PortCount=16;
+        public const int Protocol=DuelNetworkProtocol.Version,FirstPort=47770,PortCount=16;
         public const double LookupDuration=8;
         private const string Query="QUICKHANDS_QUERY_48:",Reply="QUICKHANDS_ROOM_48:";
         private sealed class Channel

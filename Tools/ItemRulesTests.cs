@@ -62,7 +62,7 @@ public static class ItemRulesTests
         Check(d.Game.HealthForSeat(0)==95&&d.ForSeat(0).Stunned&&d.Clock.Phase==ClockPhase.Shooting,"head contact deals five, stuns but does not end shooter turn HP="+d.Game.HealthForSeat(0)+" stun="+d.ForSeat(0).Stunned+" phase="+d.Clock.Phase+" target="+d.Game.LastTarget);
         Check(!d.Look(0,90,0,true,now+.31)&&!d.Fire(0,90,0,true,d.ForSeat(0).Version,now+.31,now+.31),"stunned shooter cannot control aim or voluntarily fire");
         Check(!d.Fire(1,0,0,false,d.ForSeat(1).Version,now+.31,now+.31),"taser has only one shot");
-        d.Tick(now+.6);Check(d.ForSeat(0).Ammo==0&&d.ForSeat(0).FiredAt>now,"server involuntary trigger consumes actual ammo");d.Tick(now+1.2);
+        d.Tick(now+.6);Check(d.ForSeat(0).Ammo==1&&d.ForSeat(0).FiredAt<0,"stun does not consume ammunition or force a shot");d.Tick(now+1.2);
         Check(d.Clock.Phase==ClockPhase.Returning&&!d.ForSeat(0).Stunned&&!d.ForSeat(2).TaserArmed&&d.ForSeat(2).Weapon!=DuelWeapon.Taser,"stun and unused taser expire after shot");
         now=d.Clock.PhaseAt+3.01;d.Tick(now);now=Items(d,now+.1);Check(!d.UseItem(1,DuelItem.Taser,d.Clock.Iteration,now),"next mini remains in cooldown");now=FinishMiss(d,now);now=Items(d,now+.1);Check(d.UseItem(1,DuelItem.Taser,d.Clock.Iteration,now),"two games later taser becomes reusable, same mini may repeat");
         var empty=Room(false);now=Items(empty,4);Check(!empty.ForSeat(1).HasRecovery&&!empty.ForSeat(1).HasTaser&&!empty.UseItem(1,DuelItem.Taser,empty.Clock.Iteration,now),"disabled starting items grants no inventory");

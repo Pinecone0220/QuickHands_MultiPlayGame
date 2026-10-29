@@ -49,9 +49,11 @@ public sealed class LifeFeedbackRuntimeQA:MonoBehaviour
     {
         Check(DuelLifeFeedback.Envelope(9,10,-1,false)==0,"no pre-death effect");
         Check(DuelLifeFeedback.Envelope(10,10,-1,false)==0&&DuelLifeFeedback.Envelope(10.3,10,-1,false)>.999,"smooth collapse entrance");
-        Check(DuelLifeFeedback.Envelope(35,10,-1,false)==1,"temporary loss waits for actual recovery");
-        Check(Mathf.Abs(DuelLifeFeedback.Envelope(20.375,10,20,false)-.5f)<.0001,"normalization during recovery");
-        Check(DuelLifeFeedback.Envelope(20.75,10,20,false)==0,"fully normal before recovery ends");
+        Check(DuelLifeFeedback.Envelope(12.2,10,-1,false)>.999,"temporary loss stays blurred through life display");
+        Check(Mathf.Abs(DuelLifeFeedback.Envelope(12.7,10,-1,false)-.5f)<.0001,"spectator effects fade over one second");
+        Check(DuelLifeFeedback.Envelope(13.2,10,-1,false)<.001,"temporary spectator effects fully clear without revival");
+        Check(Mathf.Abs(DuelLifeFeedback.Envelope(11.375,10,11,false)-.5f)<.0001,"early revival still normalizes effects during recovery");
+        Check(DuelLifeFeedback.Envelope(11.75,10,11,false)==0,"early revival fully normal before recovery ends");
         Check(DuelLifeFeedback.Envelope(12.35,10,-1,true)==0,"permanent death clears before fixed spectating");
         Check(RouletteTable.SpectatorTransitionStart(0)>=DuelLifeFeedback.PermanentRecoveryDuration&&DuelLifeFeedback.Envelope(10+RouletteTable.SpectatorTransitionStart(0),10,-1,true)==0,"permanent spectating starts after vision and sound recover");
         Check(RouletteTable.SpectatorTransitionStart(2)<RouletteTable.SpectatorTransitionStart(0),"temporary loss preserves existing camera timing");
@@ -108,9 +110,9 @@ public sealed class LifeFeedbackRuntimeQA:MonoBehaviour
             Check(Field<AudioLowPassFilter>(fx,"lowPass").cutoffFrequency<1000&&Field<AudioReverbFilter>(fx,"reverb").reverbLevel>-3000,"remote owner receives low-pass and small reverb");
             Check(Field<Volume>(fx,"blur").weight>.99&&Field<AudioSource>(fx,"heart").bypassListenerEffects,"local blur active and heartbeat stays audible");
             while(Now-player.State.Value.Seat1.DiedAt<1)yield return null;Check(fx.LifeOpacity>.99&&fx.NumberScroll>0&&fx.NumberScroll<1,"text holds while only number rolls");
-            while(Now-player.State.Value.Seat1.DiedAt<3)yield return null;Check(fx.Strength>.99&&fx.LifeOpacity==0&&gaspCount==0,"counter fades but collapse lasts until server recovery");Mark("holding");
+            while(Now-player.State.Value.Seat1.DiedAt<3.3)yield return null;Check(fx.Strength==0&&fx.LifeOpacity==0&&gaspCount==0&&player.State.Value.Seat1.ReviveAt<0,"counter and spectator effects fade while player remains down");Mark("holding");
             while(gaspCount==0)yield return null;double revive=player.State.Value.Seat1.ReviveAt;
-            while(Now-revive<.4)yield return null;Check(fx.Strength>0&&fx.Strength<.6&&Field<AudioLowPassFilter>(fx,"lowPass").cutoffFrequency>1000,"sound and vision recover during stand-up");
+            while(Now-revive<.4)yield return null;Check(fx.Strength==0&&Field<AudioLowPassFilter>(fx,"lowPass").cutoffFrequency>21900,"sound and vision remain clear during stand-up");
             while(player.State.Value.Seat1.DiedAt>=0)yield return null;yield return null;
             Check(fx.Strength==0&&gaspCount==1&&player.State.Value.Seat1.LivesRemaining==2,"new life is clear without replayed audio");Mark("recovered");
             while(!Seen("host","host-down"))yield return null;Check(fx.Strength==0&&heartCount==1,"host death does not affect other owner");Mark("host-unaffected");

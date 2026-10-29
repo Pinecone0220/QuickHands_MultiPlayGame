@@ -34,7 +34,7 @@ namespace HelloWorld
         private void Play(int seat,AudioSource source,AudioClip clip,AimVector position,bool local,string name)
         {
             if(clip==null)return;source.transform.position=new Vector3(position.X,position.Y,position.Z);
-            source.spatialBlend=local?0:.85f;source.PlayOneShot(clip);Played?.Invoke(seat,name);
+            int skin=DuelSkinEffects.Skin(seat,DuelItem.Ink);int tier=DuelSkinEffects.Tier(skin);source.pitch=tier>0?1+.015f*tier+.008f*(skin%3):1;source.spatialBlend=local?0:.85f;source.PlayOneShot(clip,DuelSettings.Effects);Played?.Invoke(seat,name);
         }
         internal void Observe(DuelSnapshot state,int localSeat,double now)
         {
@@ -47,7 +47,7 @@ namespace HelloWorld
                     ResetSeat(seat);initialized[seat]=true;lives[seat]=a.Life;serials[seat]=ink.Serial;
                     thrown[seat]=ink.ThrownAt;impacted[seat]=ink.ImpactAt;continue;
                 }
-                bool shooting=state.Phase==DuelPhase.Playing&&DuelInk.Shooting(state.Clock.Phase);
+                bool shooting=state.IsPracticing(seat)||state.Phase==DuelPhase.Playing&&DuelInk.Shooting(state.Clock.Phase);
                 if(serials[seat]!=ink.Serial||thrown[seat]!=ink.ThrownAt)
                 {
                     serials[seat]=ink.Serial;thrown[seat]=ink.ThrownAt;release[seat]=-1;

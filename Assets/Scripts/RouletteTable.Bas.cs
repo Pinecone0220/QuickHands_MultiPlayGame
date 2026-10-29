@@ -27,38 +27,42 @@ namespace HelloWorld
             rig.EjectedCase.position=rig.CaseOrigin+rig.CaseRotation*new Vector3(age,age*2.4f,-age*.25f)+Vector3.down*(2.8f*age*age);
             rig.EjectedCase.rotation=rig.CaseRotation*Quaternion.Euler(age*420,age*650,age*100);
         }
+        // Side-profile prisms keep the characteristic straight-stock lever-action silhouette.
+        private Transform BasProfile(string name,Material material,float halfWidth,params Vector2[] outline)
+        {
+            int n=outline.Length;var vertices=new Vector3[n*2];var triangles=new System.Collections.Generic.List<int>();
+            for(int i=0;i<n;i++){vertices[i]=new Vector3(-halfWidth,outline[i].y,outline[i].x);vertices[i+n]=new Vector3(halfWidth,outline[i].y,outline[i].x);}
+            for(int i=1;i<n-1;i++){triangles.Add(0);triangles.Add(i);triangles.Add(i+1);triangles.Add(n);triangles.Add(n+i+1);triangles.Add(n+i);}
+            for(int i=0;i<n;i++){int j=(i+1)%n;triangles.Add(i);triangles.Add(i+n);triangles.Add(j+n);triangles.Add(i);triangles.Add(j+n);triangles.Add(j);}
+            var mesh=new Mesh{name=name};mesh.vertices=vertices;mesh.triangles=triangles.ToArray();mesh.RecalculateNormals();mesh.RecalculateBounds();meshes.Add(mesh);
+            return MeshPart(name,mesh,gun,Vector3.zero,Vector3.one,material);
+        }
         private void BuildBas(Material black,Material steel,Material brass)
         {
             var stock=Mat("BAS dark walnut stock",new Color(.21f,.13f,.085f),.05f,.25f);
             var receiver=Mat("BAS brushed silver receiver",new Color(.47f,.49f,.47f),.85f,.55f);
             var pad=Mat("BAS rubber",new Color(.055f,.06f,.055f),0,.15f);
             gun=new GameObject("BAS single-load lever-action rifle").transform;gun.SetParent(world,false);gun.localScale=Vector3.one*.60f;
-            Part("Sculpted walnut fore-end",PrimitiveType.Capsule,gun,new Vector3(0,-.035f,.38f),new Vector3(.145f,.36f,.14f),stock).localRotation=Quaternion.Euler(90,0,0);
-            Part("Silver receiver",PrimitiveType.Cube,gun,new Vector3(0,.04f,-.035f),new Vector3(.14f,.16f,.42f),receiver);
+            BasProfile("Straight walnut fore-end",stock,.069f,new Vector2(.14f,-.09f),new Vector2(.72f,-.09f),new Vector2(.76f,-.065f),new Vector2(.76f,.025f),new Vector2(.15f,.025f));
+            BasProfile("Silver lever-action receiver",receiver,.07f,new Vector2(-.25f,-.065f),new Vector2(-.20f,-.10f),new Vector2(.12f,-.10f),new Vector2(.18f,-.065f),new Vector2(.18f,.11f),new Vector2(-.20f,.11f),new Vector2(-.25f,.075f));
             foreach(float z in new[]{-.19f,.15f})Part("Receiver screw",PrimitiveType.Sphere,gun,new Vector3(.073f,.01f,z),Vector3.one*.025f,black);
             Part("Open right ejection port",PrimitiveType.Cube,gun,new Vector3(.069f,.075f,-.005f),new Vector3(.008f,.075f,.19f),black);
             Axial("Free-floating rifle barrel",gun,new Vector3(0,.075f,.79f),.055f,1.10f,black);
             Axial("Under-barrel tube",gun,new Vector3(0,-.015f,.80f),.052f,.91f,black);
-            Part("Front barrel band",PrimitiveType.Cube,gun,new Vector3(0,.025f,1.12f),new Vector3(.078f,.15f,.038f),steel);
+            Part("Fore-end barrel band",PrimitiveType.Cube,gun,new Vector3(0,.005f,.72f),new Vector3(.15f,.16f,.035f),steel);
+            Part("Front barrel band",PrimitiveType.Cube,gun,new Vector3(0,.025f,1.24f),new Vector3(.078f,.15f,.038f),steel);
             Axial("BAS dark muzzle bore",gun,new Vector3(0,.075f,1.342f),.035f,.008f,black);
             Ring("BAS crown",gun,new Vector3(0,.075f,1.347f),.026f,.006f,steel,Quaternion.identity);
-            var neck=Part("Swept stock wrist",PrimitiveType.Cube,gun,new Vector3(0,-.14f,-.34f),new Vector3(.12f,.17f,.30f),stock);neck.localRotation=Quaternion.Euler(-30,0,0);
-            var butt=Part("Angled shoulder stock",PrimitiveType.Cube,gun,new Vector3(0,-.15f,-.64f),new Vector3(.16f,.23f,.47f),stock);butt.localRotation=Quaternion.Euler(9,0,0);
-            Part("Cheek rest",PrimitiveType.Cube,gun,new Vector3(0,-.02f,-.62f),new Vector3(.17f,.075f,.32f),pad);
-            Part("Butt recoil pad",PrimitiveType.Cube,gun,new Vector3(0,-.15f,-.89f),new Vector3(.18f,.26f,.045f),pad);
+            BasProfile("Lever-action walnut shoulder stock",stock,.075f,
+                new Vector2(-.95f,-.28f),new Vector2(-.68f,-.24f),new Vector2(-.37f,-.14f),new Vector2(-.23f,-.095f),
+                new Vector2(-.25f,.005f),new Vector2(-.43f,-.045f),new Vector2(-.66f,-.01f),new Vector2(-.95f,.015f));
+            var buttPad=Part("Butt recoil pad",PrimitiveType.Cube,gun,new Vector3(0,-.13f,-.955f),new Vector3(.165f,.30f,.025f),pad);buttPad.localRotation=Quaternion.Euler(0,0,0);
             Part("BAS trigger",PrimitiveType.Cube,gun,new Vector3(0,-.15f,-.16f),new Vector3(.02f,.085f,.025f),steel);
-            foreach(float z in new[]{-.19f,.22f})
-            {
-                Part("Scope riser",PrimitiveType.Cube,gun,new Vector3(0,.16f,z),new Vector3(.075f,.12f,.065f),black);
-                Ring("Scope mounting ring",gun,new Vector3(0,.265f,z),.066f,.014f,steel,Quaternion.identity);
-            }
-            Axial("Telescopic sight tube",gun,new Vector3(0,.265f,.015f),.10f,.63f,black);
-            Axial("Scope ocular",gun,new Vector3(0,.265f,-.33f),.15f,.14f,pad);
-            Axial("Scope objective bell",gun,new Vector3(0,.265f,.38f),.17f,.16f,black);
-            var lens=Mat("BAS blue-green glass",new Color(.10f,.22f,.20f),.55f,.8f);
-            Axial("Objective glass",gun,new Vector3(0,.265f,.464f),.145f,.008f,lens);
-            Axial("Ocular glass",gun,new Vector3(0,.265f,-.405f),.125f,.008f,lens);
-            Part("Elevation turret",PrimitiveType.Cylinder,gun,new Vector3(0,.35f,.04f),new Vector3(.08f,.035f,.08f),black);
+            // Compact open sights at equal height make the bore line visible in ADS.
+            Part("Rear sight base",PrimitiveType.Cube,gun,new Vector3(0,.112f,-.18f),new Vector3(.065f,.018f,.035f),black);
+            foreach(float x in new[]{-.025f,.025f})Part("Rear sight notch",PrimitiveType.Cube,gun,new Vector3(x,.135f,-.18f),new Vector3(.015f,.032f,.020f),steel);
+            Part("Front sight base",PrimitiveType.Cube,gun,new Vector3(0,.111f,1.20f),new Vector3(.04f,.016f,.050f),black);
+            Part("Front sight blade",PrimitiveType.Cube,gun,new Vector3(0,.135f,1.20f),new Vector3(.012f,.032f,.020f),steel);
             barrelPivot=new GameObject("BAS lower lever pivot").transform;barrelPivot.SetParent(gun,false);barrelPivot.localPosition=new Vector3(0,-.075f,-.025f);
             var loop=new[]{new Vector3(0,-.02f,.035f),new Vector3(0,-.16f,.005f),new Vector3(0,-.22f,-.08f),new Vector3(0,-.22f,-.25f),new Vector3(0,-.16f,-.33f),new Vector3(0,-.045f,-.31f),new Vector3(0,-.025f,-.13f)};
             for(int i=0;i<loop.Length;i++)
@@ -68,7 +72,7 @@ namespace HelloWorld
             }
             Part("Lever hinge pin",PrimitiveType.Sphere,gun,barrelPivot.localPosition+new Vector3(.075f,0,0),Vector3.one*.04f,steel);
             barrelLatch=new GameObject("BAS internal breech slide").transform;barrelLatch.SetParent(gun,false);
-            Axial("Internal breech",barrelLatch,new Vector3(0,.075f,-.12f),.065f,.22f,steel);
+
             hammer=new GameObject("BAS internal striker").transform;hammer.SetParent(gun,false);
             cartridges[0]=new GameObject("BAS hand-fed rifle cartridge").transform;cartridges[0].SetParent(gun,false);
             Axial("Brass rifle case",cartridges[0],Vector3.zero,.038f,.15f,brass);

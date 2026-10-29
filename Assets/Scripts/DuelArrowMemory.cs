@@ -84,28 +84,31 @@ namespace HelloWorld
         }
         void Resolve(double now)
         {
-            var s=State;int worst=0;var tied=new List<int>();
+            var s=State;var incorrect=new List<int>();var participants=new List<int>();int least=int.MaxValue;
             for(int i=0;i<RouletteRules.MaxPlayers;i++)if(RouletteRules.Has(s.ActiveMask,i))
             {
                 var e=s.ForSeat(i);e.Errors+=s.Length-e.Count;e.Locked=true;s.Set(i,e);
-                if(e.Errors>worst){worst=e.Errors;tied.Clear();}
-                if(e.Errors==worst&&worst>0)tied.Add(i);
+                participants.Add(i);if(e.Errors>0)incorrect.Add(i);least=Math.Min(least,e.Errors);
             }
             s.EliminatedMask=0;
-            // Only a tie across every remaining incorrect record needs dice for first place.
-            // Lower tied records are eliminated; the remaining players keep the ongoing rounds.
-            if(worst>0&&tied.Count==RouletteRules.Count(s.ActiveMask))
+            // If everyone failed, only those with the fewest errors can win.
+            if(incorrect.Count>0&&incorrect.Count==participants.Count)
             {
-                s.Phase=ArrowMemoryPhase.Dice;s.PhaseAt=now;State=s;
-                dice.Begin(new List<List<int>>{tied},now,true);return;
-            }
-            if(worst>0)
-            {
-                foreach(int loser in tied)
+                var contenders=new List<int>();
+                foreach(int seat in participants)
                 {
-                    var e=s.ForSeat(loser);e.Rank=2;s.Set(loser,e);
-                    s.ActiveMask&=~(1<<loser);s.EliminatedMask|=1<<loser;
+                    var e=s.ForSeat(seat);
+                    if(e.Errors==least)contenders.Add(seat);
+                    else{e.Rank=2;s.Set(seat,e);s.ActiveMask&=~(1<<seat);s.EliminatedMask|=1<<seat;}
                 }
+                if(contenders.Count==1){State=s;Finish(now);return;}
+                s.Phase=ArrowMemoryPhase.Dice;s.PhaseAt=now;State=s;
+                dice.Begin(new List<List<int>>{contenders},now,true);return;
+            }
+            foreach(int loser in incorrect)
+            {
+                var e=s.ForSeat(loser);e.Rank=2;s.Set(loser,e);
+                s.ActiveMask&=~(1<<loser);s.EliminatedMask|=1<<loser;
             }
             s.Phase=ArrowMemoryPhase.Results;s.PhaseAt=now;State=s;
             if(RouletteRules.Count(s.ActiveMask)<2)Finish(now);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Unity.Netcode;
 using Unity.Collections;
 namespace HelloWorld
@@ -11,7 +11,10 @@ namespace HelloWorld
         public int ConnectedMask, AliveMask, PartyAliveMask, ReadyMask, Round, Winner, LastActor, LastTarget, Shots, Sequence;
         public DuelStage Stage; public double StageStartedAt;
         public float ShotTimeLimit;
-        public bool ManualMiniGame,UnlimitedItems,AutoSelectItems;
+        public bool ManualMiniGame,UnlimitedItems,NoItemCooldown,AutoSelectItems;
+        public bool NoCooldownFor(int seat)=>seat==0&&NoItemCooldown;
+        public bool AutoSelectFor(int seat)=>seat==0&&AutoSelectItems;
+        public float ShotLimitFor(int seat)=>seat==0?ShotTimeLimit:10f;
         public DuelActionState Seat0, Seat1, Seat2, Seat3, Seat4, Seat5;
         public FixedString64Bytes Name0, Name1, Name2, Name3, Name4, Name5;
         public DuelRoundResults Results;
@@ -21,6 +24,7 @@ namespace HelloWorld
         public bool Alive(int seat) => RouletteRules.Has(AliveMask, seat);
         public int PracticeMask=>Stage==DuelStage.Idle&&Phase!=DuelPhase.Playing?ConnectedMask&ReadyMask:0;
         public bool IsPracticing(int seat)=>RouletteRules.Has(PracticeMask,seat);
+        public bool CanPreviewEquipment(int seat)=>DuelLoadout.CanPreview(Phase,Stage,Clock.Phase,Connected(seat),Alive(seat),IsPracticing(seat),ForSeat(seat).DiedAt>=0);
         public bool InParty(int seat)=>RouletteRules.Has(PartyAliveMask,seat);
         public DuelActionState ForSeat(int seat) => seat < 0 || seat >= RouletteRules.MaxPlayers ? default :
             seat == 0 ? Seat0 : seat == 1 ? Seat1 : seat == 2 ? Seat2 : seat == 3 ? Seat3 : seat == 4 ? Seat4 : Seat5;
@@ -31,7 +35,7 @@ namespace HelloWorld
                 ConnectedMask = g.ConnectedMask, AliveMask = g.AliveMask, PartyAliveMask=d.PartyAliveMask, ReadyMask = g.ReadyMask,
                 Round = g.Round, Winner = g.Winner, LastActor = g.LastActor, LastTarget = g.LastTarget, Shots = g.Shots,
                 Stage = d.Stage, StageStartedAt = d.StartedAt, Sequence = d.Sequence,
-                ShotTimeLimit=g.ShotTimeLimit,ManualMiniGame=g.ManualMiniGame,UnlimitedItems=g.UnlimitedItems,AutoSelectItems=g.AutoSelectItems,
+                ShotTimeLimit=g.ShotTimeLimit,ManualMiniGame=g.ManualMiniGame,UnlimitedItems=g.UnlimitedItems,NoItemCooldown=g.NoItemCooldown,AutoSelectItems=g.AutoSelectItems,
                 Seat0 = d.ForSeat(0), Seat1 = d.ForSeat(1), Seat2 = d.ForSeat(2), Seat3 = d.ForSeat(3), Seat4 = d.ForSeat(4), Seat5 = d.ForSeat(5) };
         }
         private static void ActionSerialize<T>(BufferSerializer<T> s, ref DuelActionState a) where T : IReaderWriter
@@ -50,11 +54,11 @@ namespace HelloWorld
             s.SerializeValue(ref a.LoadoutLocked);
             s.SerializeValue(ref a.Life);
             s.SerializeValue(ref a.LivesRemaining);s.SerializeValue(ref a.ReviveAt);
-            s.SerializeValue(ref a.HasRecovery);s.SerializeValue(ref a.HasTaser);s.SerializeValue(ref a.TaserArmed);s.SerializeValue(ref a.Stunned);s.SerializeValue(ref a.TaserReadyIteration);s.SerializeValue(ref a.HealAt);s.SerializeValue(ref a.StunnedAt);
+            s.SerializeValue(ref a.HasRecovery);s.SerializeValue(ref a.HasTaser);s.SerializeValue(ref a.TaserArmed);s.SerializeValue(ref a.Stunned);s.SerializeValue(ref a.TaserReadyIteration);s.SerializeValue(ref a.HealAt);s.SerializeValue(ref a.StunnedAt);s.SerializeValue(ref a.TaserEffectSkin);s.SerializeValue(ref a.InkEffectSkin);
             s.SerializeValue(ref a.BulletItems);s.SerializeValue(ref a.BulletUsed);
             s.SerializeValue(ref a.HasNoruFace);s.SerializeValue(ref a.NoruFaceActive);s.SerializeValue(ref a.NoruFaceReadyIteration);
             InkSerialize(s,ref a.Ink);
-            s.SerializeValue(ref a.QuickItem);s.SerializeValue(ref a.QuickItemVersion);s.SerializeValue(ref a.QuickEquipped);s.SerializeValue(ref a.QuickSpent);
+            s.SerializeValue(ref a.QuickItem);s.SerializeValue(ref a.QuickItemVersion);s.SerializeValue(ref a.PreparedItem);s.SerializeValue(ref a.PreviewItem);s.SerializeValue(ref a.QuickEquipped);s.SerializeValue(ref a.QuickSpent);
             s.SerializeValue(ref a.LoadedMask);s.SerializeValue(ref a.SpentMask);s.SerializeValue(ref a.NextChamber);
             s.SerializeValue(ref a.Kills); s.SerializeValue(ref a.CorrectInputs); s.SerializeValue(ref a.CurrentStreak); s.SerializeValue(ref a.BestStreak);
             s.SerializeValue(ref a.DamageDealt); s.SerializeValue(ref a.ShotsFired); s.SerializeValue(ref a.BestMultiKill);
@@ -94,7 +98,7 @@ namespace HelloWorld
         private static void ClockSerialize<T>(BufferSerializer<T> s,ref ClockState c) where T:IReaderWriter
         {
             s.SerializeValue(ref c.Phase);s.SerializeValue(ref c.Iteration);s.SerializeValue(ref c.ParticipantsMask);s.SerializeValue(ref c.Target);s.SerializeValue(ref c.First);s.SerializeValue(ref c.Last);
-            s.SerializeValue(ref c.MiniGame);s.SerializeValue(ref c.EliminatedMask);
+            s.SerializeValue(ref c.MiniGame);s.SerializeValue(ref c.EliminatedMask);s.SerializeValue(ref c.PlayedMask);
             s.SerializeValue(ref c.StartedAt);s.SerializeValue(ref c.PhaseAt);s.SerializeValue(ref c.HideAfter);s.SerializeValue(ref c.Signal);s.SerializeValue(ref c.Points);s.SerializeValue(ref c.SignalAt);
             ClockEntrySerialize(s,ref c.Seat0);ClockEntrySerialize(s,ref c.Seat1);ClockEntrySerialize(s,ref c.Seat2);ClockEntrySerialize(s,ref c.Seat3);ClockEntrySerialize(s,ref c.Seat4);ClockEntrySerialize(s,ref c.Seat5);
             MemorySerialize(s,ref c.Memory);
@@ -110,7 +114,7 @@ namespace HelloWorld
             s.SerializeValue(ref ConnectedMask); s.SerializeValue(ref AliveMask); s.SerializeValue(ref ReadyMask); s.SerializeValue(ref Round);
             s.SerializeValue(ref PartyAliveMask);
             s.SerializeValue(ref Winner); s.SerializeValue(ref LastActor); s.SerializeValue(ref LastTarget); s.SerializeValue(ref Shots);
-            s.SerializeValue(ref Sequence); s.SerializeValue(ref Stage); s.SerializeValue(ref StageStartedAt);s.SerializeValue(ref ShotTimeLimit);s.SerializeValue(ref ManualMiniGame);s.SerializeValue(ref UnlimitedItems);s.SerializeValue(ref AutoSelectItems);
+            s.SerializeValue(ref Sequence); s.SerializeValue(ref Stage); s.SerializeValue(ref StageStartedAt);s.SerializeValue(ref ShotTimeLimit);s.SerializeValue(ref ManualMiniGame);s.SerializeValue(ref UnlimitedItems);s.SerializeValue(ref NoItemCooldown);s.SerializeValue(ref AutoSelectItems);
             ActionSerialize(s, ref Seat0); ActionSerialize(s, ref Seat1); ActionSerialize(s, ref Seat2); ActionSerialize(s, ref Seat3);
             ActionSerialize(s, ref Seat4); ActionSerialize(s, ref Seat5);
             s.SerializeValue(ref Results);
@@ -126,7 +130,7 @@ namespace HelloWorld
             Name0.Equals(o.Name0) && Name1.Equals(o.Name1) && Name2.Equals(o.Name2) && Name3.Equals(o.Name3) &&
             Name4.Equals(o.Name4) && Name5.Equals(o.Name5) &&
             ConnectedMask == o.ConnectedMask && AliveMask == o.AliveMask && PartyAliveMask==o.PartyAliveMask && ReadyMask == o.ReadyMask && Round == o.Round && Winner == o.Winner &&
-            LastActor == o.LastActor && LastTarget == o.LastTarget && Shots == o.Shots && Sequence == o.Sequence && ShotTimeLimit==o.ShotTimeLimit && ManualMiniGame==o.ManualMiniGame && UnlimitedItems==o.UnlimitedItems && AutoSelectItems==o.AutoSelectItems &&
+            LastActor == o.LastActor && LastTarget == o.LastTarget && Shots == o.Shots && Sequence == o.Sequence && ShotTimeLimit==o.ShotTimeLimit && ManualMiniGame==o.ManualMiniGame && UnlimitedItems==o.UnlimitedItems && NoItemCooldown==o.NoItemCooldown && AutoSelectItems==o.AutoSelectItems &&
             Stage == o.Stage && StageStartedAt == o.StageStartedAt && Seat0.Equals(o.Seat0) && Seat1.Equals(o.Seat1) && Seat2.Equals(o.Seat2) && Seat3.Equals(o.Seat3) && Seat4.Equals(o.Seat4) && Seat5.Equals(o.Seat5) && Results.Equals(o.Results);
     }
 }

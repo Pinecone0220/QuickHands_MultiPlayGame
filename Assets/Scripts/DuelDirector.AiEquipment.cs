@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 namespace HelloWorld
 {
     public sealed partial class DuelDirector
@@ -10,13 +10,13 @@ namespace HelloWorld
         {
             if(!IsBot(seat))return;
             selectedWeapons[seat]=WeaponRules.Selectable[(seat-1+(Math.Max(1,round)-1)%WeaponRules.Selectable.Length)%WeaponRules.Selectable.Length];
-            selectedItems[seat]=Game.AutoSelectItems?DuelLoadout.All:DuelLoadout.AiSelection(seat,round);
+            selectedItems[seat]=DuelLoadout.AiSelection(seat,round);
             actions[seat].Weapon=selectedWeapons[seat];aiInkUsedIteration[seat]=aiQuickUsedIteration[seat]=-1;
         }
         private bool AiTaserThreat(int seat)
         {
             for(int other=0;other<actions.Length;other++)if(other!=seat&&RouletteRules.Has(Game.AliveMask,other)&&actions[other].HasTaser&&
-                (actions[other].TaserArmed||Game.UnlimitedItems||clock.State.Iteration>=actions[other].TaserReadyIteration)&&
+                (actions[other].TaserArmed||NoCooldownFor(other)||clock.State.Iteration>=actions[other].TaserReadyIteration)&&
                 (clock.State.MiniGame==PartyMiniGame.QuickHands||clock.State.First!=other))return true;
             return false;
         }
@@ -26,6 +26,7 @@ namespace HelloWorld
             bool changed=false;
             for(int bot=1;bot<actions.Length;bot++)if(IsBot(bot)&&RouletteRules.Has(Game.AliveMask,bot)&&!actions[bot].Stunned)
             {
+                if(actions[bot].PreparedItem!=0)continue;
                 if(c.MiniGame==PartyMiniGame.QuickHands)
                 {
                     if(actions[bot].QuickItem!=0||actions[bot].QuickSpent)continue;
@@ -39,9 +40,9 @@ namespace HelloWorld
                 }
                 else
                 {
-                    if(Game.HealthForSeat(bot)<=50)changed|=UseItem(bot,DuelItem.Recovery,c.Iteration,now);
-                    if(AiTaserThreat(bot))changed|=UseItem(bot,DuelItem.NoruFace,c.Iteration,now);
-                    changed|=UseItem(bot,DuelItem.Taser,c.Iteration,now);changed|=UseItem(bot,DuelItem.Bullet,c.Iteration,now);
+                    if(Game.HealthForSeat(bot)<=50&&UseItem(bot,DuelItem.Recovery,c.Iteration,now)){changed=true;continue;}
+                    if(AiTaserThreat(bot)&&UseItem(bot,DuelItem.NoruFace,c.Iteration,now)){changed=true;continue;}
+                    if(UseItem(bot,DuelItem.Taser,c.Iteration,now)||UseItem(bot,DuelItem.Bullet,c.Iteration,now)){changed=true;continue;}
                     if(actions[bot].Ink.Owned&&!actions[bot].Ink.Armed)changed|=UseItem(bot,DuelItem.Ink,c.Iteration,now);
                 }
             }
@@ -51,11 +52,11 @@ namespace HelloWorld
         {
             var a=actions[seat];bool ads=WeaponRules.SupportsAds(a.Weapon)&&a.Weapon!=DuelWeapon.Taser;
             var part=a.Weapon==DuelWeapon.BAS?DuelHitPart.Head:a.Weapon!=DuelWeapon.Revolver?DuelHitPart.Body:
-                random.NextDouble()<(Difficulty==AiDifficulty.Hard?.55:Difficulty==AiDifficulty.Normal?.3:.12)?DuelHitPart.Head:DuelHitPart.Body;
+                random.NextDouble()<(BotDifficulty(seat)==AiDifficulty.Hard?.55:BotDifficulty(seat)==AiDifficulty.Normal?.3:.12)?DuelHitPart.Head:DuelHitPart.Body;
             var point=DuelGunplay.Point(target,part);DuelGunplay.Angles(point-DuelGunplay.Eye(seat),out yaw,out pitch);
             if(!ads)for(int i=0;i<3;i++)DuelGunplay.Angles(point-DuelGunplay.MuzzleOrigin(seat,a.Weapon,false,DuelGunplay.Direction(yaw,pitch)),out yaw,out pitch);
             DuelGunplay.Sway(seat,a.Weapon,ads,now,a.AimStartedAt,out float sy,out float sp);
-            float error=Difficulty==AiDifficulty.Hard?.35f:Difficulty==AiDifficulty.Normal?1.25f:3f;
+            float error=BotDifficulty(seat)==AiDifficulty.Hard?.35f:BotDifficulty(seat)==AiDifficulty.Normal?1.25f:3f;
             yaw-=sy;pitch-=sp;yaw+=(float)(random.NextDouble()*2-1)*error;pitch+=(float)(random.NextDouble()*2-1)*error;
         }
         private void AimAiInk(int seat,int target,out float yaw,out float pitch)

@@ -32,7 +32,7 @@ public sealed class InkPresentationRuntimeQA:MonoBehaviour
     void Phase(ClockPhase phase,int iteration=1,bool quick=false)
     {typeof(DuelDirector).GetMethod("SetStage",F).Invoke(D,new object[]{DuelStage.Racing,Now});typeof(DuelClockContest).GetProperty("State").SetValue(Field<DuelClockContest>(D,"clock"),new ClockState{Phase=phase,MiniGame=quick?PartyMiniGame.QuickHands:PartyMiniGame.Countdown,Iteration=iteration,ParticipantsMask=D.Game.AliveMask,First=0,Last=3,PhaseAt=Now,StartedAt=Now+5});Publish();}
     void Throw(int actor,int target,int iteration)
-    {var delta=DuelGunplay.Point(target,DuelHitPart.Head)-DuelGunplay.Eye(actor);float distance=Mathf.Sqrt(delta.X*delta.X+delta.Z*delta.Z),t=(distance-.65f)/DuelInk.Speed;DuelGunplay.Angles(delta,out float yaw,out float pitch);yaw-=Mathf.Atan2(.24f,distance)*Mathf.Rad2Deg;pitch=Mathf.Atan2(delta.Y+.1f-DuelInk.UpwardSpeed*t+.5f*DuelInk.Gravity*t*t,distance)*Mathf.Rad2Deg;var a=D.ForSeat(actor);Check(D.ThrowInk(actor,yaw,pitch,iteration,a.Life,a.Ink.Version,Now,Now),"server accepts actual throw "+iteration);Publish();}
+    {var delta=DuelGunplay.Point(target,DuelHitPart.Head)-DuelGunplay.Eye(actor);float distance=Mathf.Sqrt(delta.X*delta.X+delta.Z*delta.Z),t=(distance-.65f)/DuelInk.Speed;DuelGunplay.Angles(delta,out float yaw,out float pitch);pitch=Mathf.Atan2(delta.Y+.1f-DuelInk.UpwardSpeed*t+.5f*DuelInk.Gravity*t*t,distance)*Mathf.Rad2Deg;var a=D.ForSeat(actor);Check(D.ThrowInk(actor,yaw,pitch,iteration,a.Life,a.Ink.Version,Now,Now),"server accepts actual throw "+iteration);Publish();}
     void Model()
     {
         var ink=DuelInkState.Empty;ink.InkedAt=10;var fade=new DuelInkFade();

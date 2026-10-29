@@ -15,7 +15,7 @@ namespace HelloWorld
     {
         public ClockPhase Phase;
         public PartyMiniGame MiniGame;
-        public int EliminatedMask;
+        public int EliminatedMask, PlayedMask;
         public MiniSignal Signal;
         public int Points;
         public double SignalAt;
@@ -27,11 +27,13 @@ namespace HelloWorld
         public ClockEntry ForSeat(int seat) => seat==0?Seat0:seat==1?Seat1:seat==2?Seat2:seat==3?Seat3:seat==4?Seat4:seat==5?Seat5:default;
         public void Set(int seat,ClockEntry entry)
         { if(seat==0)Seat0=entry;else if(seat==1)Seat1=entry;else if(seat==2)Seat2=entry;else if(seat==3)Seat3=entry;else if(seat==4)Seat4=entry;else if(seat==5)Seat5=entry; }
-        public bool Equals(ClockState o) => Phase==o.Phase && MiniGame==o.MiniGame && EliminatedMask==o.EliminatedMask && Signal==o.Signal && Points==o.Points && SignalAt==o.SignalAt && Iteration==o.Iteration && ParticipantsMask==o.ParticipantsMask && Target==o.Target && First==o.First && Last==o.Last && StartedAt==o.StartedAt && PhaseAt==o.PhaseAt && HideAfter==o.HideAfter && Memory.Equals(o.Memory) && Dice.Equals(o.Dice) && Seat0.Equals(o.Seat0) && Seat1.Equals(o.Seat1) && Seat2.Equals(o.Seat2) && Seat3.Equals(o.Seat3) && Seat4.Equals(o.Seat4) && Seat5.Equals(o.Seat5);
+        public bool Equals(ClockState o) => Phase==o.Phase && MiniGame==o.MiniGame && EliminatedMask==o.EliminatedMask && PlayedMask==o.PlayedMask && Signal==o.Signal && Points==o.Points && SignalAt==o.SignalAt && Iteration==o.Iteration && ParticipantsMask==o.ParticipantsMask && Target==o.Target && First==o.First && Last==o.Last && StartedAt==o.StartedAt && PhaseAt==o.PhaseAt && HideAfter==o.HideAfter && Memory.Equals(o.Memory) && Dice.Equals(o.Dice) && Seat0.Equals(o.Seat0) && Seat1.Equals(o.Seat1) && Seat2.Equals(o.Seat2) && Seat3.Equals(o.Seat3) && Seat4.Equals(o.Seat4) && Seat5.Equals(o.Seat5);
     }
     public sealed class DuelClockContest
     {
         public const double MiniResultsDuration=3;
+        public const double ItemHeadStart=0.5;
+        public static double ShootingStartsAt(ClockState state)=>state.PhaseAt+ItemHeadStart;
         public const double RevealDuration=MiniResultsDuration, GreedRevealDuration=MiniResultsDuration, GreedCountdownDuration=3, ShotDuration=10, ReturnDuration=3, QuickResultsDuration=MiniResultsDuration, QuickCountdownDuration=3, ItemPreparationDuration=5;
         public const int GreedMinimum=50,GreedMaximum=150000;
         public const double GreedDuration=30;
@@ -53,7 +55,6 @@ namespace HelloWorld
         private readonly DuelArrowMemory memory;
         private readonly DuelDiceContest dice;
         private int stopped;
-        private PartyMiniGame? previous;
         private double goAt,burstAt;
         private int greedThreshold;
         private readonly double[] fakeAt=new double[3];
@@ -73,10 +74,12 @@ namespace HelloWorld
             return state;
         }
         public static int Quantize(double seconds) => (int)Math.Round(seconds*100,MidpointRounding.AwayFromZero);
-        public void Reset() { State=default;stopped=0;previous=null;memory.Reset();dice.Reset();greedThreshold=0;goAt=burstAt=0; }
+        public void Reset() { State=default;stopped=0;memory.Reset();dice.Reset();greedThreshold=0;goAt=burstAt=0; }
         public void Select(int alive,double now,bool manual=false)
         {
-            State=new ClockState{Iteration=State.Iteration+1,ParticipantsMask=alive,MiniGame=manual?PartyMiniGame.Countdown:PartyGames.Choose(random,previous),Phase=ClockPhase.Selecting,PhaseAt=now,First=-1,Last=-1};
+            int played=State.PlayedMask&PartyGames.AllMask;
+            if(played==PartyGames.AllMask && RouletteRules.Count(alive)>=2)played=0;
+            State=new ClockState{Iteration=State.Iteration+1,ParticipantsMask=alive,PlayedMask=played,MiniGame=manual?PartyMiniGame.Countdown:PartyGames.ChooseAvailable(random,played),Phase=ClockPhase.Selecting,PhaseAt=now,First=-1,Last=-1};
             stopped=0;memory.Reset();dice.Reset();
         }
         public bool ChooseManual(PartyMiniGame game,double now)
@@ -84,9 +87,9 @@ namespace HelloWorld
         public void Begin(int alive,double now,PartyMiniGame game=PartyMiniGame.Countdown)
         {
             int iteration=State.Phase==ClockPhase.Selecting?State.Iteration:State.Iteration+1;
-            var s=new ClockState{Iteration=iteration,MiniGame=game,ParticipantsMask=alive,Target=game==PartyMiniGame.Countdown?random.Next(7,16)*100:0,HideAfter=game==PartyMiniGame.Countdown?2.4+random.NextDouble()*.5:0,StartedAt=now+(game==PartyMiniGame.Greed?GreedCountdownDuration:1),PhaseAt=now,Phase=ClockPhase.Counting,First=-1,Last=-1};
+            var s=new ClockState{Iteration=iteration,MiniGame=game,PlayedMask=State.PlayedMask|PartyGames.Bit(game),ParticipantsMask=alive,Target=game==PartyMiniGame.Countdown?random.Next(7,16)*100:0,HideAfter=game==PartyMiniGame.Countdown?2.4+random.NextDouble()*.5:0,StartedAt=now+(game==PartyMiniGame.Greed?GreedCountdownDuration:1),PhaseAt=now,Phase=ClockPhase.Counting,First=-1,Last=-1};
             for(int i=0;i<RouletteRules.MaxPlayers;i++)s.Set(i,new ClockEntry{Centiseconds=-1,Error=-1,Points=-1});
-            State=s;stopped=0;previous=s.MiniGame;dice.Reset();
+            State=s;stopped=0;dice.Reset();
             if(game==PartyMiniGame.Memory){s.Phase=ClockPhase.Memory;s.StartedAt=now;State=s;memory.Begin(alive,now);SyncMemory(now);return;}
             memory.Reset();
             if(game==PartyMiniGame.Signal)
@@ -99,7 +102,7 @@ namespace HelloWorld
             }
         }
         private void BeginQuickHands(double now)
-        {var s=State;s.Phase=ClockPhase.QuickHands;s.StartedAt=s.PhaseAt=now;State=s;previous=s.MiniGame;}
+        {var s=State;s.Phase=ClockPhase.QuickHands;s.StartedAt=s.PhaseAt=now;s.PlayedMask|=PartyGames.Bit(s.MiniGame);State=s;}
         private void PrepareQuickHands(double now)
         {var s=State;s.Phase=ClockPhase.QuickCountdown;s.PhaseAt=now;s.StartedAt=now+QuickCountdownDuration;State=s;}
         private void PrepareItems(double now)
@@ -246,7 +249,7 @@ namespace HelloWorld
             {if(memory.Tick(now,alive)){SyncMemory(now);return true;}return changed;}
             if(s.Phase==ClockPhase.Counting)return TickMiniGame(now)||changed;
             if(s.Phase==ClockPhase.Ranking&&now-s.PhaseAt>=RevealFor(s.MiniGame)){if(s.First<0||s.Last<0){Return(now);return true;}PrepareItems(now);return true;}
-            if(s.Phase==ClockPhase.Shooting&&!shotInFlight&&shotLimit>0&&now-s.PhaseAt>=shotLimit){Return(now);return true;}
+            if(s.Phase==ClockPhase.Shooting&&!shotInFlight&&shotLimit>0&&now-ShootingStartsAt(s)>=shotLimit){Return(now);return true;}
             return changed;
         }
     }

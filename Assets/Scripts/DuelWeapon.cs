@@ -1,4 +1,4 @@
-﻿namespace HelloWorld
+namespace HelloWorld
 {
     public enum DuelWeapon : byte { Revolver, SawedOff, Taser, BAS }
     public enum DuelItem : byte { Recovery, Taser, Ink, Bullet, NoruFace }
@@ -10,8 +10,10 @@
         public static bool IsValid(DuelWeapon weapon) => IsSelectable(weapon) || weapon == DuelWeapon.Taser;
         public static bool IsSelectable(DuelWeapon weapon)=>weapon==DuelWeapon.Revolver||weapon==DuelWeapon.SawedOff||weapon==DuelWeapon.BAS;
         public static bool IsPrecision(DuelWeapon weapon)=>weapon==DuelWeapon.Revolver||weapon==DuelWeapon.BAS;
-        public static bool SupportsAds(DuelWeapon weapon)=>IsPrecision(weapon)||weapon==DuelWeapon.Taser;
-        public static string Name(DuelWeapon weapon) => weapon == DuelWeapon.BAS ? "저격소총" : weapon == DuelWeapon.Taser ? "테이저건" : weapon == DuelWeapon.SawedOff ? "단발 소드오프" : "6연발 리볼버";
+        public static bool SupportsAds(DuelWeapon weapon)=>weapon==DuelWeapon.BAS;
+        public static bool IsHitscan(DuelWeapon weapon)=>weapon==DuelWeapon.Taser||weapon==DuelWeapon.BAS;
+        public static bool CanFireLoaded(DuelWeapon weapon,DuelAction action,int ammo)=>ammo>0&&(action==DuelAction.Aim||weapon==DuelWeapon.Revolver);
+        public static string Name(DuelWeapon weapon) => weapon == DuelWeapon.BAS ? "윈체스터" : weapon == DuelWeapon.Taser ? "테이저건" : weapon == DuelWeapon.SawedOff ? "단발 소드오프" : "6연발 리볼버";
         public static int InputLength(DuelWeapon weapon) => weapon == DuelWeapon.SawedOff || weapon==DuelWeapon.BAS ? 4 : 6;
         public static int InputLength(DuelWeapon weapon,DuelAction action)=>weapon==DuelWeapon.Revolver&&action==DuelAction.Load?3:InputLength(weapon);
         public static int Capacity(DuelWeapon weapon)=>weapon==DuelWeapon.Revolver?6:1;
