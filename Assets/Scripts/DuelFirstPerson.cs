@@ -10,6 +10,10 @@ namespace HelloWorld
         public float Pitch { get; private set; }
         public bool Ads { get; private set; }
         public bool Active { get; private set; }
+        public float InspectWeight { get; private set; }
+        public float InspectProgress { get; private set; }
+        private float inspectStarted=-1;
+        private DuelWeapon inspectWeapon;
         private int round = -1, seat = -1, pendingVersion = -1;
         private HelloWorldPlayer session;
         private double nextLook, pendingAt, adsStarted;
@@ -51,7 +55,7 @@ namespace HelloWorld
             bool wasActive=Active;
             bool enteredPractice=practice&&!wasActive;
             Active = practice || valid && s.Phase == DuelPhase.Playing && s.Stage == DuelStage.Racing && s.Alive(p.Seat.Value);
-            if (!valid) { Ads = false; captured = false; SetCursor(false); return; }
+            if (!valid) { Ads = false; captured = false; inspectStarted=-1;InspectWeight=0; SetCursor(false); return; }
             if (session != p || round != s.Round || seat != p.Seat.Value || life!=s.ForSeat(p.Seat.Value).Life)
             {
                 session = p; round = s.Round; seat = p.Seat.Value;
@@ -59,13 +63,14 @@ namespace HelloWorld
                 Yaw = seat * 60; Pitch = 0; captured = true; pendingVersion = -1; nextLook = 0; sentAds = false;
                 pendingInk=-1;
                 wheelQuickVersion=wheelInkVersion=-1;
+                inspectStarted=-1;InspectWeight=0;
             }
             if(wasActive&&!Active){Yaw=seat*60;Pitch=0;}
             if(Active&&!wasActive){captured=true;nextLook=0;}
             if(!practice&&(s.Phase==DuelPhase.Finished||s.Phase==DuelPhase.Playing&&s.ForSeat(seat).LivesRemaining==0))
             {
                 Yaw=seat*60;Pitch=0;Ads=false;captured=false;sentAds=false;
-                pendingVersion=-1;SetCursor(false);return;
+                pendingVersion=-1;inspectStarted=-1;InspectWeight=0;SetCursor(false);return;
             }
             bool blocked=DuelChat.BlocksGameplay||DuelPointer.BlocksActions;
             bool preparing=s.Phase==DuelPhase.Playing&&s.Clock.Phase==ClockPhase.ItemPreparation;
@@ -73,6 +78,7 @@ namespace HelloWorld
             bool recovering=own.DiedAt>=0&&own.LivesRemaining>0&&own.ReviveAt>=0&&time>=own.ReviveAt;
             bool falling=own.DiedAt>=0&&s.Mode==DuelMode.PvP&&time-own.DiedAt<RouletteTable.SpectatorLookDelay;
             SetCursor(true);
+            UpdateInspection(s,own,practice,time,blocked);
             if(blocked)
             {
                 Ads=false;if(sentAds){p.Look(Yaw,Pitch,false);sentAds=false;}return;
@@ -126,6 +132,31 @@ namespace HelloWorld
                 p.Fire(Yaw, Pitch, firedAds, now);
             }
         }
+        private void UpdateInspection(DuelSnapshot state,DuelActionState own,bool practice,double now,bool blocked)
+        {
+            var keyboard=Keyboard.current;var mouse=Mouse.current;
+            bool quickPreparation=state.Clock.MiniGame==PartyMiniGame.QuickHands&&
+                (state.Clock.Phase==ClockPhase.ItemPreparation||state.Clock.Phase==ClockPhase.QuickCountdown);
+            bool shooterPreparation=state.Clock.Phase==ClockPhase.ItemPreparation&&state.Clock.MiniGame!=PartyMiniGame.QuickHands&&state.Clock.First==seat;
+            bool quick=state.Clock.Phase==ClockPhase.QuickHands;
+            bool shooting=state.Clock.Phase==ClockPhase.Shooting&&state.Clock.First==seat;
+            bool playing=state.Phase==DuelPhase.Playing&&state.Stage==DuelStage.Racing&&state.Alive(seat);
+            bool held=practice||playing&&(quickPreparation||shooterPreparation||quick||shooting);
+            DuelWeapon weapon=playing&&(quickPreparation||shooterPreparation)?own.SelectedWeapon:own.Weapon;
+            bool itemEquipped=own.QuickEquipped||own.Ink.Armed||state.CanPreviewEquipment(seat)&&own.PreviewItem!=0;
+            bool available=held&&!blocked&&!itemEquipped&&WeaponRules.IsSelectable(weapon)&&!own.IsStunned(now)&&own.DiedAt<0;
+            bool interrupted=mouse!=null&&(mouse.leftButton.wasPressedThisFrame||mouse.rightButton.isPressed||Mathf.Abs(mouse.scroll.ReadValue().y)>.01f);
+            if(keyboard!=null)interrupted|=keyboard.anyKey.wasPressedThisFrame&&!keyboard.iKey.wasPressedThisFrame||keyboard.digit1Key.wasPressedThisFrame||keyboard.digit2Key.wasPressedThisFrame||keyboard.digit3Key.wasPressedThisFrame||keyboard.digit4Key.wasPressedThisFrame||keyboard.digit5Key.wasPressedThisFrame||keyboard.numpad1Key.wasPressedThisFrame||keyboard.numpad2Key.wasPressedThisFrame||keyboard.numpad3Key.wasPressedThisFrame||keyboard.numpad4Key.wasPressedThisFrame||keyboard.numpad5Key.wasPressedThisFrame;
+            if(!available||interrupted||inspectStarted>=0&&weapon!=inspectWeapon)inspectStarted=-1;
+            if(available&&!interrupted&&keyboard!=null&&keyboard.iKey.wasPressedThisFrame)
+            {if(inspectStarted>=0)inspectStarted=-1;else{inspectStarted=Time.unscaledTime;inspectWeapon=weapon;}}
+            float age=Time.unscaledTime-inspectStarted;
+            if(inspectStarted<0||age>=4f){inspectStarted=-1;InspectWeight=0;InspectProgress=0;return;}
+            InspectProgress=Mathf.Clamp01(age/4f);
+            float enter=Mathf.SmoothStep(0,1,Mathf.Clamp01(age/.42f));
+            float exit=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(3.35f,4f,age));
+            InspectWeight=enter*exit;
+        }
         private bool TryEquipmentKey(HelloWorldPlayer player,DuelSnapshot state,bool practice,double now)
         {
             var keyboard=Keyboard.current;if(keyboard==null)return false;
@@ -173,6 +204,6 @@ namespace HelloWorld
         {
             DuelPointer.ApplyCursor();
         }
-        private void OnDisable() { SetCursor(false); }
+        private void OnDisable() { inspectStarted=-1;InspectWeight=0;SetCursor(false); }
     }
 }

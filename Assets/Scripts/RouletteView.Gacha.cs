@@ -13,6 +13,8 @@ namespace HelloWorld
         private VisualElement creditExchangeLayer;
         private Texture2D creditIcon;
         private ScrollView batchResults;
+        private Button singleAwardEquip;
+        private readonly Button[] batchEquipButtons=new Button[10];
         private readonly int[] batchCategories=new int[10],batchSkins=new int[10];
         private readonly bool[] batchDuplicates=new bool[10];private int batchCount,batchCreditTotal;
         private const string GoldKey="qh.gacha.gold";
@@ -84,6 +86,8 @@ namespace HelloWorld
             for(int i=0;i<awardSparks.Length;i++){awardSparks[i]=Text(skinAwardOverlay,"✦","skin-award-spark");awardSparks[i].pickingMode=PickingMode.Ignore;}
             awardFlash=Box(skinAwardOverlay,"skin-award-flash");awardFlash.pickingMode=PickingMode.Ignore;awardCard=Box(skinAwardOverlay,"skin-award-card");skinAwardName=Text(awardCard,"","skin-award-name");skinAwardImage=new Image{scaleMode=ScaleMode.ScaleToFit,pickingMode=PickingMode.Ignore};skinAwardImage.AddToClassList("skin-award-image");awardCard.Add(skinAwardImage);
             batchResults=new ScrollView(ScrollViewMode.Vertical){horizontalScrollerVisibility=ScrollerVisibility.Hidden};batchResults.AddToClassList("gacha-batch-results");awardCard.Add(batchResults);Show(batchResults,false);
+            singleAwardEquip=Button(awardCard,"장착",()=>EquipAwardSkin(prizeItem,prizeColor),"secondary");singleAwardEquip.AddToClassList("gacha-award-equip");
+            singleAwardEquip.RegisterCallback<ClickEvent>(e=>e.StopPropagation());
             Text(awardCard,"화면을 클릭하여 닫기","skin-award-hint");skinAwardOverlay.RegisterCallback<ClickEvent>(e=>{CloseSkinPreview();e.StopPropagation();});Show(skinAwardOverlay,false);
             creditExchangeLayer=Box(gachaLayer,"credit-exchange-layer");var exchangePanel=Box(creditExchangeLayer,"credit-exchange-panel");
             var exchangeHeader=Box(exchangePanel,"gacha-head");Text(exchangeHeader,"크레딧 교환소","gacha-title");Button(exchangeHeader,"닫기",()=>SetCreditExchange(false),"secondary");
@@ -245,6 +249,17 @@ namespace HelloWorld
             skinAwardName.text=DuelSkins.GradeName(PrizeGrade(item,color))+"  ·  "+PrizeName(item,color)+(duplicate?"  (중복 · 크레딧 +"+DuplicateCredit(PrizeGrade(item,color))+")":"  획득!");
             awardGrade=PrizeGrade(item,color);awardStarted=Time.unscaledTime-(skipAwardAnimation?2f:0f);skinAwardName.style.color=DuelSkins.GradeColor(awardGrade);Show(skinAwardOverlay,true);skinAwardOverlay.BringToFront();UpdateAwardAnimation();
         }
+        private static bool AwardSkinEquipped(int category,int skin)
+        {return category<DuelLoadout.ItemCount?DuelSkins.Equipped(category)==skin:DuelSkins.WeaponEquipped(category-DuelLoadout.ItemCount)==skin;}
+        private void EquipAwardSkin(int category,int skin)
+        {
+            if(category<DuelLoadout.ItemCount){DuelSkins.Equip(category,skin);RefreshSkinIcons();}
+            else DuelSkins.EquipWeapon(category-DuelLoadout.ItemCount,skin);
+            if(batchCount==1)
+            {bool equipped=AwardSkinEquipped(prizeItem,prizeColor);singleAwardEquip.text=equipped?"장착 중":"장착";}
+            else for(int i=0;i<batchCount;i++)if(batchEquipButtons[i]!=null)
+            {bool equipped=AwardSkinEquipped(batchCategories[i],batchSkins[i]);batchEquipButtons[i].text=equipped?"장착 중":"장착";}
+        }
         private void SetGachaWheelAngle(float angle)
         {
             wheelAngle=angle;gachaWheel3D.SetAngle(angle);
@@ -310,6 +325,8 @@ namespace HelloWorld
             gachaResult.text=batchCount>1?batchCount+"회 뽑기 완료"+(batchCreditTotal>0?" · 크레딧 +"+batchCreditTotal:""):DuelSkins.GradeName(grade)+"  ·  "+PrizeName(prizeItem,prizeColor)+(duplicate?"  (중복 · 크레딧 +"+DuplicateCredit(grade)+")":"  획득!");
             gachaResult.style.color=DuelSkins.GradeColor(grade);gachaAudio?.Award(grade);ShowSkinAward(prizeItem,prizeColor,duplicate);
             batchResults.Clear();Show(batchResults,batchCount>1);skinAwardImage.EnableInClassList("batch-preview",batchCount>1);
+            Show(singleAwardEquip,batchCount==1);
+            if(batchCount==1){bool equipped=AwardSkinEquipped(prizeItem,prizeColor);singleAwardEquip.text=equipped?"장착 중":"장착";}
             if(batchCount>1)
             {
                 skinAwardName.text=batchCount+"회 뽑기 결과"+(batchCreditTotal>0?" · 크레딧 +"+batchCreditTotal:"");
@@ -317,9 +334,13 @@ namespace HelloWorld
                 {
                     int category=batchCategories[i],skin=batchSkins[i],itemGrade=PrizeGrade(category,skin);
                     string label=DuelSkins.GradeName(itemGrade)+"  ·  "+PrizeName(category,skin)+(batchDuplicates[i]?"  (중복 · +"+DuplicateCredit(itemGrade)+")":"");
-                    var button=Button(batchResults,label,()=>{ShowPrizeModel(category,skin);skinAwardImage.image=skinModelPreview.Texture;},"gacha-result-entry");
+                    var row=Box(batchResults,"gacha-result-row");
+                    var button=Button(row,label,()=>{ShowPrizeModel(category,skin);skinAwardImage.image=skinModelPreview.Texture;},"gacha-result-entry");
                     button.style.color=DuelSkins.GradeColor(itemGrade);
                     button.RegisterCallback<ClickEvent>(e=>e.StopPropagation());
+                    bool equipped=AwardSkinEquipped(category,skin);
+                    var equip=Button(row,equipped?"장착 중":"장착",()=>EquipAwardSkin(category,skin),"secondary");equip.AddToClassList("gacha-result-equip");batchEquipButtons[i]=equip;
+                    equip.RegisterCallback<ClickEvent>(e=>e.StopPropagation());
                 }
             }
             Show(gachaControls,true);Show(gachaDetails,true);Show(gachaSkip,false);UpdateGachaGold();

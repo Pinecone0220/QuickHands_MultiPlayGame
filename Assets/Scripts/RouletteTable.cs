@@ -33,6 +33,7 @@ namespace HelloWorld
         private Material liveTip, shellRed;
         private readonly LineRenderer[] healRings=new LineRenderer[RouletteRules.MaxPlayers];
         private readonly LineRenderer[,] rareHealRings=new LineRenderer[RouletteRules.MaxPlayers,3];
+        private readonly LineRenderer[,] rareHealMotes=new LineRenderer[RouletteRules.MaxPlayers,8];
         private readonly LineRenderer[,] stunArcs=new LineRenderer[RouletteRules.MaxPlayers,3];
         public float HitPulse { get; private set; }
         public bool TryGetNameViewport(int seat, out Vector3 point)
@@ -181,6 +182,12 @@ namespace HelloWorld
                 gun.localPosition = Rest(i); gun.localRotation = RestRotation(i);
                 gun.gameObject.SetActive(false); loadingHand.gameObject.SetActive(false);
             }
+            for (int i = 0; i < RouletteRules.MaxPlayers; i++)
+            {
+                inspectHands[i] = BuildBasPinch(skinMaterials[i]);
+                inspectHands[i].name = "Inspection cartridge hand " + i;
+                inspectHands[i].gameObject.SetActive(false);
+            }
         }
         private sealed class GunRig
         {
@@ -199,6 +206,7 @@ namespace HelloWorld
         }
         private readonly int[] cosmeticCache = { -1, -1, -1, -1, -1, -1 };
         private readonly GunRig[,] rigs = new GunRig[RouletteRules.MaxPlayers, WeaponRules.Count];
+        private readonly Transform[] inspectHands = new Transform[RouletteRules.MaxPlayers];
         public bool TryVisibleMuzzle(int seat,DuelWeapon weapon,out Vector3 position,out Vector3 direction)
         {
             position=direction=Vector3.zero;
@@ -286,7 +294,7 @@ namespace HelloWorld
         private void ShowHealing(int seat,DuelActionState action,double now,bool enabled)
         {
             bool show=enabled&&action.HealAt>=0&&now-action.HealAt<1.1;
-            var ring=healRings[seat];if(!show){if(ring!=null)ring.enabled=false;for(int i=0;i<3;i++)if(rareHealRings[seat,i]!=null)rareHealRings[seat,i].enabled=false;return;}
+            var ring=healRings[seat];if(!show){if(ring!=null)ring.enabled=false;for(int i=0;i<3;i++)if(rareHealRings[seat,i]!=null)rareHealRings[seat,i].enabled=false;for(int i=0;i<8;i++)if(rareHealMotes[seat,i]!=null)rareHealMotes[seat,i].enabled=false;return;}
             if(ring==null)
             {var go=new GameObject("Healing aurora "+seat);go.transform.SetParent(world,false);ring=go.AddComponent<LineRenderer>();healRings[seat]=ring;var mat=new Material(Resources.Load<Shader>("DuelBullet"));mat.SetColor("_BaseColor",new Color(.15f,1,.4f,1));materials.Add(mat);ring.sharedMaterial=mat;ring.useWorldSpace=true;ring.loop=true;ring.positionCount=40;ring.startWidth=ring.endWidth=.04f;ring.shadowCastingMode=ShadowCastingMode.Off;}
             int skin=DuelSkins.FromPacked(HelloWorldPlayer.SkinsForSeat(seat),(int)DuelItem.Recovery);ring.sharedMaterial.SetColor("_BaseColor",skin==0?new Color(.15f,1,.4f,1):DuelSkins.Tint(skin));
@@ -299,7 +307,29 @@ namespace HelloWorld
                 if(!active){if(halo!=null)halo.enabled=false;continue;}
                 if(halo==null){var go=new GameObject("Rare healing spiral "+seat+"-"+i);go.transform.SetParent(world,false);halo=go.AddComponent<LineRenderer>();rareHealRings[seat,i]=halo;var mat=new Material(Resources.Load<Shader>("DuelBullet"));mat.SetColor("_BaseColor",Color.white);materials.Add(mat);halo.sharedMaterial=mat;halo.useWorldSpace=true;halo.loop=true;halo.positionCount=40;halo.shadowCastingMode=ShadowCastingMode.Off;}
                 halo.enabled=true;halo.startWidth=halo.endWidth=tier>=3?.024f+.004f*tier:.014f+.003f*tier;Color glow=DuelSkinEffects.Glow(skin);glow.a=Mathf.Clamp01(1-age)*.75f;halo.startColor=halo.endColor=glow;
-                for(int j=0;j<40;j++){float angle=j*Mathf.PI*2/40-age*(3+i)+i*2.1f;float radius=.30f+i*.08f;halo.SetPosition(j,SeatPosition(seat)+new Vector3(Mathf.Cos(angle)*radius,.95f+age*.60f+i*.13f+Mathf.Sin(angle*2+age*5)*.09f,Mathf.Sin(angle)*radius));}
+                for(int j=0;j<40;j++)
+                {
+                    float angle=j*Mathf.PI*2/40-age*(3+i)+i*2.1f;
+                    float radius=(.30f+i*.08f)*(tier==4?1+.14f*Mathf.Cos(angle*6+age*2):tier==3?1+.08f*Mathf.Cos(angle*4):1);
+                    float height=.95f+age*.60f+i*.13f+Mathf.Sin(angle*(tier==4?3:2)+age*5)*.09f;
+                    halo.SetPosition(j,SeatPosition(seat)+new Vector3(Mathf.Cos(angle)*radius,height,Mathf.Sin(angle)*radius));
+                }
+            }
+            int moteCount=tier==4?8:tier==3?6:tier==2?4:0;
+            for(int i=0;i<8;i++)
+            {
+                var mote=rareHealMotes[seat,i];if(i>=moteCount){if(mote!=null)mote.enabled=false;continue;}
+                if(mote==null)
+                {
+                    var go=new GameObject("Healing light mote "+seat+"-"+i);go.transform.SetParent(world,false);mote=go.AddComponent<LineRenderer>();rareHealMotes[seat,i]=mote;
+                    mote.sharedMaterial=rareHealRings[seat,0].sharedMaterial;mote.useWorldSpace=true;mote.loop=true;mote.positionCount=4;mote.shadowCastingMode=ShadowCastingMode.Off;mote.receiveShadows=false;
+                }
+                float angle=i*Mathf.PI*2/moteCount+age*(tier==4?2.4f:1.5f);float orbit=.25f+i%3*.06f;
+                Vector3 center=SeatPosition(seat)+new Vector3(Mathf.Cos(angle)*orbit,.97f+age*.9f+(i%3)*.09f,Mathf.Sin(angle)*orbit);
+                float size=(tier==4?.055f:tier==3?.045f:.035f)*(1-age*.45f);Vector3 side=new Vector3(Mathf.Cos(angle),0,Mathf.Sin(angle))*size;
+                mote.SetPosition(0,center+Vector3.up*size*1.5f);mote.SetPosition(1,center+side);mote.SetPosition(2,center-Vector3.up*size*1.5f);mote.SetPosition(3,center-side);
+                Color sparkle=Color.Lerp(DuelSkinEffects.Glow(skin),Color.white,tier==4?.6f:.4f);sparkle.a=Mathf.Clamp01(1-age)*.8f;
+                mote.startColor=mote.endColor=sparkle;mote.startWidth=mote.endWidth=tier==4?.014f:.01f;mote.enabled=true;
             }
         }
         private void ShowStun(int seat,double now,bool enabled,int skin)
@@ -463,7 +493,13 @@ namespace HelloWorld
             HitPulse = ownHitAt >= 0 ? Mathf.Exp(-Mathf.Max(0, (float)(now - ownHitAt)) * 5) : 0;
             for (int seat = 0; seat < RouletteRules.MaxPlayers; seat++)
             {
+                inspectHands[seat].gameObject.SetActive(false);
                 var action = state.ForSeat(seat);
+                bool localPreparation=ready&&seat==localSeat&&!watching&&state.Phase==DuelPhase.Playing&&state.Stage==DuelStage.Racing&&state.Alive(seat)&&
+                    (state.Clock.MiniGame==PartyMiniGame.QuickHands&&(state.Clock.Phase==ClockPhase.ItemPreparation||state.Clock.Phase==ClockPhase.QuickCountdown)||
+                     state.Clock.MiniGame!=PartyMiniGame.QuickHands&&state.Clock.Phase==ClockPhase.ItemPreparation&&state.Clock.First==seat)&&
+                    action.PreviewItem==0&&!action.QuickEquipped&&!action.Ink.Armed;
+                if(localPreparation){action.Weapon=action.SelectedWeapon;action.Action=DuelAction.Aim;}
                 UpdateCosmetics(seat, ready ? HelloWorldPlayer.SkinsForSeat(seat) : 0);
                 bool practice=ready&&state.IsPracticing(seat);
                 bool preview=ready&&state.CanPreviewEquipment(seat)&&action.PreviewItem!=0;
@@ -478,7 +514,7 @@ namespace HelloWorld
                 puppet.Root.gameObject.SetActive(occupied);
                 ShowNoruFace(seat,ready&&occupied&&(practice||state.Alive(seat))&&action.NoruFaceActive&&
                     (practice||state.Clock.Phase==ClockPhase.ItemPreparation||state.Clock.Phase==ClockPhase.QuickCountdown||DuelInk.Shooting(state.Clock.Phase)));
-                gun.gameObject.SetActive(occupied && (previewTaser||!shared || seat==holder || action.TaserArmed&&state.Clock.Phase==ClockPhase.Shooting));
+                gun.gameObject.SetActive(occupied && (localPreparation||previewTaser||!shared || seat==holder || action.TaserArmed&&state.Clock.Phase==ClockPhase.Shooting));
                 ShowHealing(seat,action,now,ready&&(practice||state.Clock.Phase==ClockPhase.ItemPreparation)); loadingHand.gameObject.SetActive(false);
                 if (!occupied) { rigs[seat,3].EjectedCase.gameObject.SetActive(false);rigs[seat,3].BasSeen=false;muzzleLight.intensity = 0;weaponAudio.Observe(seat,state.Round,state.Clock.Iteration,action,now,false,false,false,Vector3.zero);continue; }
                 if (ready) lastShotAt = System.Math.Max(lastShotAt, action.FiredAt);
@@ -487,7 +523,7 @@ namespace HelloWorld
                 float fall = dead ? Smooth((float)(now - action.DiedAt) / FallDuration) : 0;
                 float recovery=dead&&action.LivesRemaining>0&&action.ReviveAt>=0?Mathf.Clamp01((float)((now-action.ReviveAt)/DuelDirector.RecoveryDuration)):0;
                 fall*=1-Smooth(recovery);
-                bool active = !inkPose&&(previewTaser||practice||ready && (!shared || seat==holder || action.TaserArmed&&state.Clock.Phase==ClockPhase.Shooting) && state.Alive(seat) && (state.Stage == DuelStage.Racing || state.Stage == DuelStage.AfterShot));
+                bool active = !inkPose&&(localPreparation||previewTaser||practice||ready && (!shared || seat==holder || action.TaserArmed&&state.Clock.Phase==ClockPhase.Shooting) && state.Alive(seat) && (state.Stage == DuelStage.Racing || state.Stage == DuelStage.AfterShot));
                 bool shooter = active && action.FiredAt >= 0 && elapsed < 0.3f;
                 float progress = action.Progress / (float)action.Length;
                 bool revolver=action.Weapon==DuelWeapon.Revolver;
@@ -541,7 +577,26 @@ namespace HelloWorld
                     PlaceBasView(rigs[seat,3],Vec(DuelGunplay.Eye(seat)),facing,new Vector3(.20f,-.30f,.86f),Quaternion.Euler(angle));
                 }
                 if(action.Weapon==DuelWeapon.BAS&&!(seat==viewSeat&&viewActive&&active))rigs[seat,3].ViewPoseInitialized=false;
+                bool inspecting=ready&&seat==localSeat&&!watching&&firstPerson!=null&&firstPerson.InspectWeight>0&&WeaponRules.IsSelectable(action.Weapon);
+                if(inspecting)
+                {
+                    var eye=Vec(DuelGunplay.Eye(seat));var facing=firstPerson.Rotation(now);float weight=firstPerson.InspectWeight;
+                    float inspectProgress=firstPerson.InspectProgress;
+                    float turn=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.30f,.53f,inspectProgress));
+                    float settle=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.63f,.80f,inspectProgress));
+                    bool rifle=action.Weapon==DuelWeapon.BAS;
+                    var firstOffset=rifle?new Vector3(.08f,-.18f,1.08f):new Vector3(.08f,-.15f,.82f);
+                    var secondOffset=rifle?new Vector3(.12f,-.13f,1.13f):new Vector3(.11f,-.12f,.87f);
+                    var offset=Vector3.Lerp(firstOffset,secondOffset,turn);
+                    offset+=new Vector3(0,Mathf.Sin(inspectProgress*Mathf.PI*2)*.008f*(1-settle),0);
+                    var firstPose=Quaternion.Euler(rifle?-8:-12,rifle?-64:-70,rifle?14:20);
+                    var secondPose=Quaternion.Euler(rifle?5:3,rifle?-35:-40,rifle?-13:-18);
+                    var pose=Quaternion.Slerp(firstPose,secondPose,turn);
+                    gun.position=Vector3.Lerp(gun.position,eye+facing*offset,weight);
+                    gun.rotation=Quaternion.Slerp(gun.rotation,facing*pose,weight);
+                }
                 holdingHand.gameObject.SetActive(lift > 0.05f);
+                if(inspecting)holdingHand.gameObject.SetActive(true);
                 bool loading = active && !shooter && action.Action == DuelAction.Load;
                 bool opening = active && !shooter && action.Action == DuelAction.OpenBarrel;
                 bool closingBarrel = active && !shooter && action.Action == DuelAction.CloseBarrel;
@@ -575,6 +630,7 @@ namespace HelloWorld
                 hammer.localRotation = Quaternion.Slerp(hammer.localRotation, Quaternion.Euler(-65 * cock, 0, 0), follow);
                 foreach (var cartridge in cartridges) cartridge.gameObject.SetActive(false);
                 loadingHand.gameObject.SetActive(!gunReady&&!shooter&&(action.Weapon==DuelWeapon.BAS?loading:opening || loading || closingBarrel || unlocking || cocking));
+                if(inspecting)loadingHand.gameObject.SetActive(false);
                 if(revolver)
                 {
                     int spentRank=0,spentCount=RouletteRules.Count(action.SpentMask);
@@ -622,14 +678,70 @@ namespace HelloWorld
                 }
                 if(action.Weapon==DuelWeapon.BAS)
                 {
-                    holdingHand.position=opening||closingBarrel?barrelPivot.TransformPoint(new Vector3(.075f,-.125f,-.335f)):gun.TransformPoint(BasGripWrist);
-                    holdingHand.rotation=opening||closingBarrel?barrelPivot.rotation:gun.rotation;
+                    holdingHand.position=!inspecting&&(opening||closingBarrel)?barrelPivot.TransformPoint(new Vector3(.075f,-.125f,-.335f)):gun.TransformPoint(BasGripWrist);
+                    holdingHand.rotation=!inspecting&&(opening||closingBarrel)?barrelPivot.rotation:gun.rotation;
                     if(loading){loadingHand.position=cartridges[0].TransformPoint(new Vector3(-.14f,-.06f,-.12f));loadingHand.rotation=cartridges[0].rotation;}
-                    rigs[seat,3].Support.gameObject.SetActive(holdingHand.gameObject.activeSelf&&!loading&&active&&!dead);
+                    rigs[seat,3].Support.gameObject.SetActive(holdingHand.gameObject.activeSelf&&(!loading||inspecting)&&active&&!dead);
+                }
+                if(inspecting&&action.Weapon!=DuelWeapon.BAS)
+                {
+                    float supportBlend=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.04f,.20f,firstPerson.InspectProgress));
+                    var support=action.Weapon==DuelWeapon.SawedOff?new Vector3(.08f,-.15f,.23f):new Vector3(.08f,-.17f,-.06f);
+                    loadingHand.gameObject.SetActive(supportBlend>.01f);
+                    loadingHand.position=gun.TransformPoint(support+new Vector3(0,-.08f*(1-supportBlend),0));
+                    loadingHand.rotation=gun.rotation*Quaternion.Euler(-12,70,-8);
+                }
+                // Inspection uses a visual cartridge only. The server's loaded mask is never changed.
+                if(inspecting&&(action.LoadedMask!=0||practice))
+                {
+                    float inspectTime=firstPerson.InspectProgress;
+                    float opened=Smooth(Mathf.InverseLerp(.10f,.23f,inspectTime))*(1-Smooth(Mathf.InverseLerp(.78f,.93f,inspectTime)));
+                    float removed=Smooth(Mathf.InverseLerp(.20f,.37f,inspectTime))*(1-Smooth(Mathf.InverseLerp(.66f,.83f,inspectTime)));
+                    int chamber=revolver?WeaponRules.Chamber(action.LoadedMask,action.NextChamber):0;
+                    if(chamber<0&&practice)chamber=0;
+                    if(chamber>=0&&opened>.001f)
+                    {
+                        if(revolver)barrelLatch.localRotation=Quaternion.Euler(0,-85*opened,0);
+                        else if(action.Weapon==DuelWeapon.BAS)
+                        {barrelPivot.localRotation=Quaternion.Euler(-45*opened,0,0);barrelLatch.localPosition=new Vector3(0,0,-.13f*opened);}
+                        else barrelPivot.localRotation=Quaternion.Euler(42*opened,0,0);
+                        var cartridge=cartridges[chamber];cartridge.gameObject.SetActive(true);
+                        if(revolver){cartridge.localPosition=ChamberPosition(chamber);cartridge.localRotation=Quaternion.identity;var tip=cartridge.Find("Bullet tip");if(tip!=null)tip.gameObject.SetActive(true);}
+                        else if(action.Weapon==DuelWeapon.BAS){cartridge.localPosition=new Vector3(.015f,.075f,.02f);cartridge.localRotation=Quaternion.identity;}
+                        else {cartridge.localPosition=new Vector3(0,.12f,.085f);cartridge.localRotation=Quaternion.identity;}
+                        var facing=firstPerson.Rotation(now);var eye=Vec(DuelGunplay.Eye(seat));
+                        var inspectPoint=eye+facing*new Vector3(.035f,-.12f,.62f);
+                        cartridge.position=Vector3.Lerp(cartridge.position,inspectPoint,removed);
+                        var inspectRotation=facing*Quaternion.Euler(18,-32+Mathf.Sin(inspectTime*Mathf.PI*4)*10,48);
+                        cartridge.rotation=Quaternion.Slerp(cartridge.rotation,inspectRotation,removed);
+                        if(removed>.01f)
+                        {
+                            if(action.Weapon==DuelWeapon.BAS)rigs[seat,3].Support.gameObject.SetActive(false);
+                            loadingHand.gameObject.SetActive(false);
+                            loadingHand=inspectHands[seat];
+                            loadingHand.gameObject.SetActive(true);
+                            loadingHand.rotation=cartridge.rotation;
+                            // Place the thumb and index tips around the cartridge, independent of gun scale.
+                            loadingHand.position=cartridge.position-loadingHand.rotation*new Vector3(.15f,.055f,.16f)*.60f;
+                        }
+                    }
                 }
                 bool flashing = shooter && elapsed < 0.12f;
                 if(inkPose){gun.gameObject.SetActive(false);holdingHand.gameObject.SetActive(false);loadingHand.gameObject.SetActive(false);}
                 flash.SetActive(flashing); muzzleLight.intensity = flashing ? 8 : 0;
+                if(action.Weapon!=DuelWeapon.Taser)
+                {
+                    int weaponSkin=ready?DuelSkinEffects.WeaponSkin(seat,action.Weapon):0;
+                    int tier=DuelSkinEffects.WeaponTier(weaponSkin);var renderer=flash.GetComponent<Renderer>();
+                    if(tier>=2)
+                    {
+                        Color tint=DuelSkinEffects.WeaponGlow(weaponSkin,Time.unscaledTime);var block=new MaterialPropertyBlock();
+                        block.SetColor("_BaseColor",Color.Lerp(tint,Color.white,.25f));block.SetColor("_EmissionColor",tint*(tier==4?6f:tier==3?4.5f:3f));
+                        renderer.SetPropertyBlock(block);muzzleLight.color=tint;
+                        if(flashing)muzzleLight.intensity=tier==4?11:tier==3?9.5f:8;
+                    }
+                    else {renderer.SetPropertyBlock(null);muzzleLight.color=new Color(1,.6f,.18f);}
+                }
                 float hitAge=ready&&action.HitAt>=0?(float)(now-action.HitAt):-1;
                 float hit=hitAge>=0?Smooth(hitAge/.06f)*(1-Smooth((hitAge-.06f)/.34f)):0;
                 float lookYaw=ready?action.AimYaw:seat*60, lookPitch=ready?action.AimPitch:0;
@@ -643,7 +755,7 @@ namespace HelloWorld
                     ActionAge=Mathf.Max(0,(float)(now-action.StartedAt)),Active=active&&(practice||state.Clock.Phase==ClockPhase.QuickHands||state.Clock.Phase==ClockPhase.Shooting),GunReady=gunReady||shooter,Aiming=action.Aiming||manualAim||shooter&&action.FiredAds,
                     Recoil=shooter?recoil/10:0,Stunned=ready&&action.IsStunned(now),Attentive=ready&&state.Clock.Phase==ClockPhase.Counting,
                     Winner=ready&&!practice&&state.Phase==DuelPhase.Finished&&state.Winner==seat,
-                    ViewModel=seat==viewSeat&&viewActive&&(previewInk||gunReady||shooter||action.Weapon==DuelWeapon.BAS&&active),
+                    ViewModel=seat==viewSeat&&viewActive&&(inspecting||previewInk||gunReady||shooter||action.Weapon==DuelWeapon.BAS&&active),
                     Healing=ready&&(practice||state.Clock.Phase==ClockPhase.ItemPreparation)&&action.HealAt>=0?Mathf.Clamp01(1-(float)(now-action.HealAt)/1.1f):0};
                 AnimatePuppetFrame(puppet, lift, hit, fall, lookYaw, lookPitch,recovery,poseContext);
                 if(poseContext.ViewModel&&viewModelLayer!=null)
@@ -652,16 +764,18 @@ namespace HelloWorld
                     viewModelLayer.Include(puppet.Upper);viewModelLayer.Include(puppet.Forearm);viewModelLayer.Include(puppet.Hand);
                     viewModelLayer.Include(puppet.LeftArm);viewModelLayer.Include(puppet.LeftForearm);viewModelLayer.Include(puppet.LeftHand);
                 }
+                else if(ready&&gun.gameObject.activeInHierarchy)viewModelLayer?.IncludeGun(gun);
                 ObserveBasCase(rigs[seat,3],action,state.Round,now,ready&&action.Weapon==DuelWeapon.BAS&&!dead);
 
                 ShowStun(seat,now,ready&&(practice||state.Alive(seat)&&DuelInk.Shooting(state.Clock.Phase))&&action.IsStunned(now)&&
                     !(seat==viewSeat&&viewActive),ready?DuelSkinEffects.SourceSkin(state,seat,DuelItem.Taser):0);
                 if(ready)
                 {
-                    Vector3 shotMuzzle=action.FiredWeapon==action.Weapon?muzzle.position:Vec(action.FiredOrigin);
-                    shotVisuals.Observe(seat,state.Round,action,now,shotMuzzle,practice);
+                    var authoritativeAction=state.ForSeat(seat);
+                    Vector3 shotMuzzle=authoritativeAction.FiredWeapon==action.Weapon?muzzle.position:Vec(authoritativeAction.FiredOrigin);
+                    shotVisuals.Observe(seat,state.Round,authoritativeAction,now,shotMuzzle);
                 }
-                if(ready)weaponAudio.Observe(seat,state.Round,state.Clock.Iteration,action,now,true,poseContext.Active&&(practice||state.Phase==DuelPhase.Playing),poseContext.Combat&&(practice||state.Alive(seat)),
+                if(ready)weaponAudio.Observe(seat,state.Round,state.Clock.Iteration,state.ForSeat(seat),now,true,poseContext.Active&&(practice||state.Phase==DuelPhase.Playing),poseContext.Combat&&(practice||state.Alive(seat)),
                     gun.gameObject.activeSelf?gun.position:puppet.Root.TransformPoint(new Vector3(0,1.4f,-.45f)));
             }
             if(shared && holder<0)

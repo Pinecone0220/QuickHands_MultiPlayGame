@@ -304,6 +304,10 @@ Button.weapon-choice-button { height: 80px; flex-direction: column; align-items:
 .skin-award-image.batch-preview { height: 180px; }
 .gacha-batch-results { width: 100%; height: 250px; margin-top: 8px; margin-bottom: 8px; }
 .gacha-result-entry { min-height: 32px; margin: 2px; -unity-text-align: middle-left; font-size: 14px; background-color: rgb(24, 34, 32); }
+.gacha-result-row { flex-direction: row; align-items: center; }
+.gacha-result-row .gacha-result-entry { flex-grow: 1; flex-basis: 0; min-width: 0; }
+.gacha-result-equip { width: 78px; height: 32px; margin: 2px; padding-left: 4px; padding-right: 4px; font-size: 12px; }
+.gacha-award-equip { min-width: 150px; margin-top: 8px; margin-bottom: 8px; }
 .skin-award-hint { color: rgb(170, 180, 168); font-size: 14px; -unity-text-align: middle-center; }
 .skin-award-halo { position: absolute; width: 520px; height: 520px; max-width: 82%; max-height: 82%; border-width: 5px; border-radius: 260px; }
 .skin-award-flash { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }

@@ -51,7 +51,8 @@ namespace HelloWorld
             int variation=(a.Previous.Version+seat*7)&7;
             source.pitch=report?1:.98f+variation*.005f;
             if(key.StartsWith("Taser")){int skin=DuelSkinEffects.Skin(seat,DuelItem.Taser);int tier=DuelSkinEffects.Tier(skin);if(tier>0)source.pitch=1+.012f*tier+.006f*(skin%3);}
-            source.PlayOneShot(clip,gain*DuelSettings.Effects);Played?.Invoke(seat,key);
+            source.PlayOneShot(clip,gain*DuelSettings.Effects);
+            Played?.Invoke(seat,key);
         }
         private static string Prefix(DuelWeapon w)=>w==DuelWeapon.BAS?"Bas":w==DuelWeapon.SawedOff?"Saw":w==DuelWeapon.Taser?"Taser":"Revolver";
         private static string Mechanism(DuelWeapon w,DuelAction action)

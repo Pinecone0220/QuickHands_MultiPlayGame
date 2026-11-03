@@ -12,7 +12,6 @@ namespace HelloWorld
         private const int Mask = 1 << Layer;
         private readonly Camera source, camera;
         private readonly bool sourceIncludedLayer;
-        private readonly Dictionary<Transform, Renderer[]> cache = new Dictionary<Transform, Renderer[]>();
         private readonly Dictionary<GameObject, int> originalLayers = new Dictionary<GameObject, int>();
         private RenderTexture texture;
         private bool visible;
@@ -36,14 +35,25 @@ namespace HelloWorld
         public void Include(Transform root)
         {
             if (root == null) return;
-            if (!cache.TryGetValue(root, out var renderers))
-                cache[root] = renderers = root.GetComponentsInChildren<Renderer>(true);
-            foreach (var renderer in renderers)
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
             {
                 if (renderer == null) continue;
                 var go = renderer.gameObject;
                 if (originalLayers.ContainsKey(go)) continue;
                 originalLayers.Add(go, go.layer); go.layer = Layer;
+            }
+        }
+        public void IncludeGun(Transform root)
+        {
+            if(root==null)return;
+            foreach(var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if(renderer==null)continue;
+                bool hand=false;
+                for(var part=renderer.transform;part!=null&&part!=root;part=part.parent)
+                    if(part.name=="Grip hand"||part.name=="BAS right grip"||part.name=="BAS left support"){hand=true;break;}
+                if(hand||originalLayers.ContainsKey(renderer.gameObject))continue;
+                originalLayers.Add(renderer.gameObject,renderer.gameObject.layer);renderer.gameObject.layer=Layer;
             }
         }
         public void Present()

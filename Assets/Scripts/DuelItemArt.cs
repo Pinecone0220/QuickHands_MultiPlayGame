@@ -81,6 +81,15 @@ namespace HelloWorld
                 Color baseColor=skinColor??(electric?new Color(.25f,.76f,1):new Color(.17f,1,.43f));
                 float alpha=electric?edge*.12f+bolt*.6f:edge*edge*wave*.38f;
                 if(skinColor.HasValue&&tier>0){float sparkle=Mathf.Pow(Mathf.Max(0,Mathf.Sin(x*.11f+y*.09f)),18)*edge;alpha=Mathf.Clamp01(alpha+sparkle*(.07f+tier*.025f));}
+                if(!electric&&skinColor.HasValue&&tier>=2&&edge>.12f)
+                {
+                    int spacing=tier==4?39:tier==3?48:62;
+                    float dx=Mathf.Abs((x+spacing/2)%spacing-spacing/2),dy=Mathf.Abs((y+spacing/2)%spacing-spacing/2);
+                    float size=tier==4?8:tier==3?6:4;
+                    bool diamond=dx/size+dy/(size*1.5f)<1;
+                    bool glint=tier>=3&&((dx<1.2f&&dy<size*1.8f)||(dy<1.2f&&dx<size*1.5f));
+                    if(diamond||glint){float strength=(tier==4?.34f:tier==3?.26f:.18f)*edge;alpha=Mathf.Min(.65f,alpha+strength);baseColor=Color.Lerp(baseColor,Color.white,tier==4?.48f:.28f);}
+                }
                 p[y*n+x]=new Color(baseColor.r,baseColor.g,baseColor.b,alpha);
             }
             t.SetPixels(p);t.Apply(false,true);return t;
